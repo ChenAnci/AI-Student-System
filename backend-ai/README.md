@@ -19,14 +19,14 @@
 ## LangGraph 工作流
 
 ```
-classify（意图识别）→ fetch（查库）→（仅选课建议）retrieve → generate（LLM 生成）
+classify（意图识别）→ fetch（查库）→（选课建议 / 自由问答）retrieve → generate（LLM 生成）
 ```
 
 | 节点 | 文件 | 职责 |
 |---|---|---|
 | `classify` | `agents/intent.py` | 意图识别：学业查询 / 选课建议 / 课程分析 / 自由问答 |
 | `fetch` | `agents/tools.py` | 按角色 + 学号拉取数据（学生只能查自己，管理员按目标学号） |
-| `retrieve` | `agents/retrieve.py` | 仅选课建议：混合检索（向量 + BM25 → RRF 融合）→ BGE-Reranker 重排 top5 |
+| `retrieve` | `agents/retrieve.py` | 选课建议：LLM 提问重写为多角度查询 → 混合检索（向量 + BM25 → RRF 融合）→ BGE-Reranker 重排；自由问答：以提问检索课程目录 |
 | `generate` | `agents/generator.py` | 组装 prompt（系统提示 + 历史 + 检索数据）→ DeepSeek 生成回答 |
 
 课程向量库在服务启动时从 MySQL 全量同步到 ChromaDB（`vectorstore.sync_catalog`，失败仅告警不阻塞启动）。

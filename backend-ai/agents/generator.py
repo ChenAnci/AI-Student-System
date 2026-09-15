@@ -37,6 +37,7 @@ def _build_body(state: AIState) -> str:
         f"\n## 学生画像\n{profile}\n"
         f"## 成绩单\n{_dump(results.get('grades'))}\n"
         f"## 课表\n{_dump(results.get('schedule'))}\n"
+        f"## 检索到的相关课程\n{_dump([r['course_name'] for r in state.get('retrieved', [])])}\n"
         f"## 学生问题\n{state['query']}"
     )
 

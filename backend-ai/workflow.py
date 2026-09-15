@@ -1,6 +1,7 @@
 """LangGraph 工作流组装。
 
-流程：classify → fetch →（COURSE_RECOMMEND 时）retrieve → generate。
+流程：classify → fetch →（选课建议 / 自由问答时）retrieve → generate。
+选课建议触发提问重写 + 混合检索；自由问答也检索课程目录（RAG 覆盖面更广）。
 各节点入口均检查 error 短路，异常兜底在 FastAPI 层统一处理。
 """
 from langgraph.graph import END, START, StateGraph
@@ -13,7 +14,7 @@ from models.state import AIState
 
 
 def _route_after_query(state: AIState) -> str:
-    return "retrieve" if state.get("intent") == "COURSE_RECOMMEND" else "generate"
+    return "retrieve" if state.get("intent") in ("COURSE_RECOMMEND", "FREE_QA") else "generate"
 
 
 def build_workflow():

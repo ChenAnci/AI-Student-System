@@ -87,17 +87,17 @@ AI 服务（`backend-ai/`）独立部署，基于 **FastAPI + LangGraph 智能�
 ### LangGraph 工作流
 
 ```
-classify（意图识别）→ fetch（查库）→（仅选课建议）retrieve → generate（LLM 生成）
+classify（意图识别）→ fetch（查库）→（选课建议 / 自由问答）retrieve → generate（LLM 生成）
 ```
 
 | 节点 | 职责 |
 |---|---|
 | `classify` | 意图识别：学业查询 / 选课建议 / 课程分析 / 自由问答 |
 | `fetch` | 按角色 + 学号拉取学生数据（学生只能查自己，管理员按目标学号） |
-| `retrieve` | 仅选课建议：混合检索（向量 + BM25 → RRF 融合）→ BGE-Reranker 重排 top5 |
+| `retrieve` | 选课建议：LLM 提问重写 → 混合检索（向量 + BM25 → RRF 融合）→ BGE-Reranker 重排；自由问答：以提问检索课程目录 |
 | `generate` | 组装 prompt（系统提示 + 历史 + 检索数据）→ DeepSeek 生成回答 |
 
-「选课建议」的课程召回采用**混合检索**：BGE-M3 向量召回（语义相近）+ jieba 分词 BM25 关键词召回（精确词项），经 Reciprocal Rank Fusion（RRF）融合后由 BGE-Reranker 重排取 top5。BM25 语料直接来自 MySQL，embedding 不可用时关键词检索仍可用。可用 `backend-ai/test_retrieval.py` 评估各策略的 Recall@K / Precision@K / MRR。
+「选课建议」的课程召回采用**提问重写 + 混合检索**：先用 LLM 将学生画像与原始提问改写为多角度查询（专业方向 / 兴趣技能 / 学分与时间偏好），再分别做 BGE-M3 向量召回 + jieba 分词 BM25 关键词召回，经 Reciprocal Rank Fusion（RRF）融合后由 BGE-Reranker 重排取 top5；「自由问答」也接入课程目录检索以扩大 RAG 覆盖面。BM25 语料直接来自 MySQL，embedding 不可用时关键词检索仍可用。可用 `backend-ai/test_retrieval.py` 评估各策略的 Recall@K / Precision@K / MRR。
 
 ### 安全与限流
 
