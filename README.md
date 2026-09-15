@@ -92,7 +92,10 @@ AI 服务（`backend-ai/`）独立部署，基于 **FastAPI + LangGraph 智能�
 ### LangGraph 工作流
 
 ```
-classify（意图识别）→ fetch（查库）→（选课建议 / 自由问答）retrieve → generate（LLM 生成）
+classify（意图识别）→ fetch（查库）
+   │
+   ├─【选课建议 / 自由问答】→ retrieve（提问重写 + 混合检索 + rerank）→ generate（LLM 生成）
+   └─【成绩查询 / 课程分析】──────────────────────→ generate（LLM 生成）
 ```
 
 | 节点 | 职责 |
