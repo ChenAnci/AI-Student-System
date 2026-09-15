@@ -6,6 +6,8 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+# 本机临时依赖目录（pip install --target ./_deps）
+_deps/
 
 # ChromaDB 数据
 chroma/
