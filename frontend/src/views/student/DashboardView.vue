@@ -91,12 +91,27 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <el-row :gutter="16" class="mt16">
+      <el-col :span="12">
+        <el-card shadow="hover" header="成绩分数段分布">
+          <EChart :option="bandOption" height="300px" />
+        </el-card>
+      </el-col>
+      <el-col :span="12">
+        <el-card shadow="hover" header="各课程成绩对比">
+          <EChart :option="courseOption" height="300px" />
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import type { EChartsOption } from 'echarts'
 import { dashboard as getDashboard } from '@/api/grade'
+import EChart from '@/components/EChart.vue'
 import type { DashboardData, GradeVO } from '@/types'
 
 const loading = ref(false)
@@ -114,6 +129,61 @@ const dashOffset = computed(() => circumference * (1 - progress.value / 100))
 const progressText = computed(() => `${progress.value.toFixed(1)}%`)
 
 const recentGrades = computed<GradeVO[]>(() => (data.value.gradeList ?? []).slice(0, 6))
+
+/** 已发布且已评分成绩 */
+const publishedGrades = computed<GradeVO[]>(() =>
+  (data.value.gradeList ?? []).filter((g) => g.auditStatus === 'PUBLISHED' && g.score != null)
+)
+
+/** 成绩分数段分布（柱状图） */
+const bandOption = computed<EChartsOption>(() => {
+  const bands = ['60分以下', '60-69分', '70-79分', '80-89分', '90-100分']
+  const counts = [0, 0, 0, 0, 0]
+  publishedGrades.value.forEach((g) => {
+    const s = g.score!
+    if (s < 60) counts[0]++
+    else if (s < 70) counts[1]++
+    else if (s < 80) counts[2]++
+    else if (s < 90) counts[3]++
+    else counts[4]++
+  })
+  return {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: '{b}<br/>课程数：{c}' },
+    grid: { left: 10, right: 20, top: 30, bottom: 10, containLabel: true },
+    xAxis: { type: 'category', data: bands },
+    yAxis: { type: 'value', minInterval: 1 },
+    series: [
+      {
+        type: 'bar',
+        data: counts,
+        itemStyle: { color: '#67c23a', borderRadius: [4, 4, 0, 0] },
+        barMaxWidth: 44
+      }
+    ]
+  }
+})
+
+/** 各课程成绩对比（柱状图） */
+const courseOption = computed<EChartsOption>(() => {
+  const rows = publishedGrades.value
+  return {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: '{b}<br/>成绩：{c} 分' },
+    grid: { left: 10, right: 20, top: 30, bottom: 10, containLabel: true },
+    xAxis: { type: 'category', data: rows.map((g) => g.courseName), axisLabel: { interval: 0, rotate: rows.length > 4 ? 25 : 0 } },
+    yAxis: { type: 'value', min: 0, max: 100 },
+    series: [
+      {
+        type: 'bar',
+        data: rows.map((g) => ({
+          value: g.score,
+          itemStyle: { color: g.score! >= 60 ? '#409eff' : '#f56c6c', borderRadius: [4, 4, 0, 0] }
+        })),
+        barMaxWidth: 40,
+        markLine: { data: [{ type: 'average', name: '平均' }], lineStyle: { color: '#e6a23c' } }
+      }
+    ]
+  }
+})
 
 function statusText(status: string) {
   const map: Record<string, string> = {
