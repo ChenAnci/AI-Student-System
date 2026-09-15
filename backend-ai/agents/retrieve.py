@@ -40,5 +40,7 @@ def retrieve_node(state: AIState) -> AIState:
             if r["course_id"] not in seen:
                 seen.add(r["course_id"])
                 merged.append(r)
+    # 跨查询按 rerank 分数降序融合后再截断，避免查询1独占 top5 导致提问重写多角度收益丢失
+    merged.sort(key=lambda r: r["score"], reverse=True)
     state["retrieved"] = merged[:5]
     return state

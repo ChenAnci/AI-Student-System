@@ -34,7 +34,25 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="AI 智能分析服务", lifespan=lifespan)
+app = FastAPI(
+    title="AI 智能分析服务",
+    lifespan=lifespan,
+    # P-2：交互文档默认关闭（仅调试时 .env 设 ENABLE_DOCS=true 开启），与后端 knife4j 基线对齐
+    docs_url="/docs" if settings.enable_docs else None,
+    redoc_url="/redoc" if settings.enable_docs else None,
+    openapi_url="/openapi.json" if settings.enable_docs else None,
+)
+
+
+@app.middleware("http")
+async def security_headers_middleware(request, call_next):
+    """P-6：补齐安全响应头（部署到边缘网关前的服务内兜底）。"""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Cache-Control", "no-store")
+    return response
 
 
 @app.get("/health")

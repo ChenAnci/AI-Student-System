@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.4
     # AI 服务监听端口（可通过 .env 的 AI_PORT 覆盖，避免与其它进程冲突）
     ai_port: int = 8000
+    # 是否启用 /docs 等交互文档（生产默认关闭；仅调试时在 .env 设 ENABLE_DOCS=true 开启）
+    enable_docs: bool = False
 
 
 settings = Settings()
