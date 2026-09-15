@@ -94,8 +94,10 @@ classify（意图识别）→ fetch（查库）→（仅选课建议）retrieve 
 |---|---|
 | `classify` | 意图识别：学业查询 / 选课建议 / 课程分析 / 自由问答 |
 | `fetch` | 按角色 + 学号拉取学生数据（学生只能查自己，管理员按目标学号） |
-| `retrieve` | 仅选课建议：学生画像文本向量化 → ChromaDB 召回 top20 → BGE-Reranker 重排 top5 |
+| `retrieve` | 仅选课建议：混合检索（向量 + BM25 → RRF 融合）→ BGE-Reranker 重排 top5 |
 | `generate` | 组装 prompt（系统提示 + 历史 + 检索数据）→ DeepSeek 生成回答 |
+
+「选课建议」的课程召回采用**混合检索**：BGE-M3 向量召回（语义相近）+ jieba 分词 BM25 关键词召回（精确词项），经 Reciprocal Rank Fusion（RRF）融合后由 BGE-Reranker 重排取 top5。BM25 语料直接来自 MySQL，embedding 不可用时关键词检索仍可用。可用 `backend-ai/test_retrieval.py` 评估各策略的 Recall@K / Precision@K / MRR。
 
 ### 安全与限流
 

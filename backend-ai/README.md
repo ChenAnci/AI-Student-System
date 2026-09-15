@@ -26,10 +26,31 @@ classify（意图识别）→ fetch（查库）→（仅选课建议）retrieve 
 |---|---|---|
 | `classify` | `agents/intent.py` | 意图识别：学业查询 / 选课建议 / 课程分析 / 自由问答 |
 | `fetch` | `agents/tools.py` | 按角色 + 学号拉取数据（学生只能查自己，管理员按目标学号） |
-| `retrieve` | `agents/retrieve.py` | 仅选课建议：学生画像文本向量化 → ChromaDB 召回 top20 → BGE-Reranker 重排 top5 |
+| `retrieve` | `agents/retrieve.py` | 仅选课建议：混合检索（向量 + BM25 → RRF 融合）→ BGE-Reranker 重排 top5 |
 | `generate` | `agents/generator.py` | 组装 prompt（系统提示 + 历史 + 检索数据）→ DeepSeek 生成回答 |
 
 课程向量库在服务启动时从 MySQL 全量同步到 ChromaDB（`vectorstore.sync_catalog`，失败仅告警不阻塞启动）。
+
+## 混合检索
+
+选课建议的课程召回采用**混合检索**（`vectorstore.py` / `bm25.py`）：
+
+1. **向量召回**：学生画像文本经 BGE-M3 向量化 → ChromaDB 召回 top20（语义相近）
+2. **关键词召回**：jieba 分词 + BM25 在课程语料上召回 top20（精确词项匹配，独立于向量库）
+3. **RRF 融合**：两路结果按 Reciprocal Rank Fusion 融合为 top20
+4. **重排序**：融合结果经 SiliconFlow BGE-Reranker 重排，取 top5
+
+BM25 语料直接来自 MySQL（不依赖向量库），embedding 不可用时关键词检索仍可用。
+
+## 检索质量测试
+
+`test_retrieval.py` 基于真实课程语料自动构造查询集（课程名 / 学分 / 教师名等 ground truth），对比**纯向量 / 纯 BM25 / 混合 RRF / 混合 + rerank** 四种策略，输出 Hit@K、Recall@K、Precision@K、MRR：
+
+```bash
+python test_retrieval.py               # 默认 K=5，跳过 rerank（不消耗 API）
+python test_retrieval.py --rerank      # 启用 SiliconFlow rerank
+python test_retrieval.py --topk 10
+```
 
 ## 目录结构
 
