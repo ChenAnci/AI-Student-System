@@ -60,7 +60,9 @@ backend-ai/
 ├── config.py          # 配置读取（.env）
 ├── db.py              # MySQL 只读查询（按学号绑定参数）
 ├── llm.py             # LLM（DeepSeek 官方）/ Embedding·Rerank（SiliconFlow）封装
-├── vectorstore.py     # ChromaDB 课程向量库
+├── vectorstore.py     # 混合检索（向量 + BM25 → RRF 融合 → rerank）
+├── bm25.py            # jieba 分词 + BM25 关键词索引
+├── test_retrieval.py  # 检索质量评估（Recall@K / Precision@K / MRR）
 ├── models/            # LangGraph State + 请求响应模型
 ├── agents/            # 意图识别 / 工具 / 检索重排 / 生成
 ├── workflow.py        # LangGraph 工作流组装
@@ -90,7 +92,7 @@ python main.py
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/health` | 健康检查 |
-| POST | `/api/chat` | 学生问答。请求头须带 `Authorization: Bearer <JWT>`（由 Spring 登录签发），body：`{"message": "...", "history": [{"role": "user"|"assistant", "content": "..."}]}` |
+| POST | `/api/chat` | 学生问答。请求头须带 `Authorization: Bearer <JWT>`（由 Spring 登录签发），body：`{"message": "...", "history": [{"role": "user"\|"assistant", "content": "..."}]}` |
 
 ## 安全
 

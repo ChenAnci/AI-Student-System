@@ -122,7 +122,9 @@ classify（意图识别）→ fetch（查库）→（仅选课建议）retrieve 
 │   ├── prompts/      # 智能体提示词
 │   ├── workflow.py   # LangGraph 工作流组装
 │   ├── llm.py        # LLM（DeepSeek）/ Embedding·Rerank（SiliconFlow）封装
-│   ├── vectorstore.py# ChromaDB 课程向量库
+│   ├── vectorstore.py# 混合检索（向量 + BM25 → RRF 融合 → rerank）
+│   ├── bm25.py       # jieba 分词 + BM25 关键词索引
+│   ├── test_retrieval.py  # 检索质量评估（Recall@K / Precision@K / MRR）
 │   └── db.py         # 参数化数据库访问
 ├── frontend/         # Vue 3 前端
 │   └── src/views/    # student/ teacher/ admin 三角色页面
