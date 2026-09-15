@@ -61,6 +61,13 @@
           </el-form-item>
         </el-form>
 
+        <el-divider class="oauth-divider"><span class="divider-text">或使用以下方式登录</span></el-divider>
+
+        <el-button class="github-btn" :loading="githubLoading" @click="handleGithubLogin">
+          <svg class="gh-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+          使用 GitHub 登录
+        </el-button>
+
         <div class="login-tips">
           <p>账号由教学秘书统一分配；如忘记密码，请联系教学秘书重置</p>
         </div>
@@ -76,6 +83,7 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { login } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
+import { getGithubAuthorizeUrl } from '@/api/oauth'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -84,6 +92,7 @@ const steps = ['输入工号 / 学号与密码', '完成身份校验', '进入�
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
+const githubLoading = ref(false)
 const form = reactive({ username: '', password: '' })
 
 const rules: FormRules = {
@@ -107,6 +116,17 @@ async function handleLogin() {
     router.push(homeByRole(data.roleType))
   } finally {
     loading.value = false
+  }
+}
+
+async function handleGithubLogin() {
+  githubLoading.value = true
+  try {
+    const data = await getGithubAuthorizeUrl()
+    // 整页跳转到 GitHub 授权（完成后由后端 302 回 /oauth/callback）
+    window.location.href = data.url
+  } catch {
+    githubLoading.value = false
   }
 }
 </script>
@@ -292,6 +312,37 @@ async function handleLogin() {
   font-size: 12px;
   color: #5a6b87;
   line-height: 1.8;
+}
+
+/* GitHub 登录入口 */
+.oauth-divider {
+  margin: 4px 0 18px;
+  --el-border-color: #d9e2f0;
+}
+.divider-text {
+  font-size: 12px;
+  color: #8a97ad;
+  padding: 0 10px;
+}
+.github-btn {
+  width: 100%;
+  height: 44px;
+  border-radius: var(--radius-md);
+  border: 1px solid #d9e2f0;
+  background: #fff;
+  color: #1f2d3d;
+  font-size: 14px;
+  font-weight: 600;
+}
+.github-btn:hover {
+  border-color: var(--brand-blue);
+  color: var(--brand-blue);
+}
+.gh-icon {
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  vertical-align: -3px;
 }
 
 /* 响应式：窄屏隐藏左侧 */

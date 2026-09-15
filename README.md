@@ -23,12 +23,17 @@
 - **成绩审核**：待审核/已审核/已发布成绩流审核
 - **选课监控**：课程选课人数、余量监控、代学生选课
 
+### 登录方式
+- **账号密码登录**：工号/学号 + 密码（bcrypt 校验、失败锁定防爆破）
+- **GitHub OAuth 登录**：使用 GitHub 账号授权登录；首次授权后绑定现有工号/学号账号，之后一键登录（绑定关系存 `oauth_binding` 表，含 state 防 CSRF）
+
 ### 安全设计
 - JWT 登录鉴权 + 接口级角色权限（fail-closed，未命中规则默认 403）
 - 登录失败锁定防爆破、bcrypt 密码哈希、账号状态（休学/冻结）联动拦截
 - 选课容量行级锁（SELECT … FOR UPDATE）防并发超选、成绩 0-100 校验
 - 数据库/AI 服务密码与密钥全部环境变量注入，不入库；AI 服务独立 JWT 验签 + 限流 + 仅本机监听
 - 跨域白名单、CORS 配置外置、Swagger 文档鉴权
+- GitHub OAuth：回调 state 一次性校验（10 分钟过期）防 CSRF；`providerUid` 绑定防一码多用；Client Secret 仅环境变量注入不入库
 
 ### 演示数据
 - 内置约 100+ 条真实数据：学生 55 人、教师 12 人、课程 25 门、选课成绩 368 条（含学分/GPA 汇总）
@@ -137,6 +142,7 @@ classify（意图识别）→ fetch（查库）
 ├── frontend/         # Vue 3 前端
 │   └── src/views/    # student/ teacher/ admin 三角色页面
 └── sql/init.sql      # 数据库初始化脚本
+    sql/oauth_binding.sql  # GitHub OAuth 绑定关系表（可选，启用 GitHub 登录时执行）
 ```
 
 ## 快速开始
@@ -145,6 +151,7 @@ classify（意图识别）→ fetch（查库）
 
 ```sql
 mysql -uroot -p < sql/init.sql
+mysql -uroot -p student_management < sql/oauth_binding.sql   # 启用 GitHub 登录时执行
 ```
 
 ### 2. 启动后端（8080）
@@ -155,6 +162,9 @@ cd backend
 export JWT_SECRET='<64字节随机密钥>'
 export DB_USERNAME=root
 export DB_PASSWORD='<数据库密码>'
+export GITHUB_CLIENT_ID='<GitHub OAuth App Client ID>'         # 可选：启用 GitHub 登录
+export GITHUB_CLIENT_SECRET='<GitHub OAuth App Client Secret>' # 可选：启用 GitHub 登录
+# export GITHUB_REDIRECT_URI='http://localhost:8080/api/oauth/github/callback'  # 可选：自定义回调地址
 mvn spring-boot:run
 ```
 
@@ -191,6 +201,8 @@ npm run dev
 | `JWT_SECRET` | JWT 签名密钥（≥32字符） | 后端启动时注入 |
 | `DB_USERNAME` / `DB_PASSWORD` | 数据库凭据 | 后端启动时注入 |
 | `CORS_ALLOWED_ORIGINS` | 前端域名白名单 | 后端启动时注入 |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth App 凭据（可选，启用 GitHub 登录） | 后端启动时注入 |
+| `GITHUB_REDIRECT_URI` | GitHub 授权回调地址（默认 `http://localhost:8080/api/oauth/github/callback`） | 后端启动时注入 |
 | `MYSQL_PASSWORD` | AI 服务数据库密码 | backend-ai/.env |
 | `DEEPSEEK_API_KEY` | AI 对话模型密钥（`deepseek-v4-flash`，必填） | backend-ai/.env |
 | `SILICONFLOW_API_KEY` | AI 向量检索密钥（选课建议使用） | backend-ai/.env |

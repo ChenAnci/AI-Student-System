@@ -19,6 +19,13 @@ export interface LoginResponse {
   className?: string
 }
 
+/** GitHub OAuth 回调结果 */
+export interface OAuthCallbackResult {
+  status: 'LOGIN_SUCCESS' | 'NEED_BIND'
+  token?: string
+  providerUid?: string
+}
+
 export interface Staff {
   id: number
   staffNo: string
