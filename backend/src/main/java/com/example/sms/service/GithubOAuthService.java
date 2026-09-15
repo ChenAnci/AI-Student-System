@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -20,7 +21,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * GitHub OAuth 登录服务：
@@ -35,7 +36,9 @@ public class GithubOAuthService {
     private static final String AUTH_URL = "https://github.com/login/oauth/authorize";
     private static final String TOKEN_URL = "https://github.com/login/oauth/access_token";
     private static final String USER_URL = "https://api.github.com/user";
-    private static final long STATE_TTL_MILLIS = 10 * 60 * 1000L;
+    /** OAuth state 有效期（与 Redis key TTL 一致，10 分钟） */
+    private static final long STATE_TTL_SECONDS = 10 * 60L;
+    private static final String STATE_KEY = "sms:oauth:state:";
 
     @Value("${oauth.github.client-id:}")
     private String clientId;
@@ -52,11 +55,12 @@ public class GithubOAuthService {
     @Autowired
     private AuthService authService;
 
+    @Autowired
+    private StringRedisTemplate redis;
+
     private final HttpClient http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
     private final ObjectMapper mapper = new ObjectMapper();
     private final SecureRandom random = new SecureRandom();
-    /** state 缓存：state -> 过期时间戳（一次性使用） */
-    private final ConcurrentHashMap<String, Long> stateStore = new ConcurrentHashMap<>();
 
     /** 1. 生成 GitHub 授权跳转地址（未配置时抛业务提示） */
     public String buildAuthorizeUrl() {
@@ -169,11 +173,8 @@ public class GithubOAuthService {
         byte[] bytes = new byte[24];
         random.nextBytes(bytes);
         String state = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        stateStore.put(state, System.currentTimeMillis() + STATE_TTL_MILLIS);
-        // 惰性清理过期 state，防止缓存无界增长
-        if (stateStore.size() > 1000) {
-            stateStore.entrySet().removeIf(e -> e.getValue() < System.currentTimeMillis());
-        }
+        // Redis 存储并设置 TTL（多实例共享；过期自动清理，无需手动回收）
+        redis.opsForValue().set(STATE_KEY + state, "1", STATE_TTL_SECONDS, TimeUnit.SECONDS);
         return state;
     }
 
@@ -181,8 +182,8 @@ public class GithubOAuthService {
         if (state == null) {
             return false;
         }
-        Long expire = stateStore.remove(state);
-        return expire != null && expire > System.currentTimeMillis();
+        // 原子删除：返回 true 表示存在且仅能消费一次（一次性 + TTL 过期双重兜底）
+        return Boolean.TRUE.equals(redis.delete(STATE_KEY + state));
     }
 
     private String enc(String s) {
