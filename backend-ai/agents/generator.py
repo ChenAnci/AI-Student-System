@@ -1,4 +1,4 @@
-"""回答生成节点：组 prompt（系统提示 + 历史 + 数据）→ DeepSeek-V3 生成回答。"""
+"""回答生成节点：组 prompt（系统提示 + 历史 + 数据）→ DeepSeek 官方模型生成回答。"""
 import json
 from pathlib import Path
 

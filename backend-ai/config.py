@@ -5,12 +5,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # ---- 硅基流动 SiliconFlow ----
+    # ---- DeepSeek 官方（对话模型，OpenAI 兼容接口）----
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com/v1"
+
+    # ---- 硅基流动 SiliconFlow（向量检索：embedding / rerank）----
+    # DeepSeek 官方不提供 embedding/rerank，选课建议的向量检索继续走 SiliconFlow
     siliconflow_api_key: str = ""
     siliconflow_base_url: str = "https://api.siliconflow.cn/v1"
 
     # ---- 模型 ----
-    llm_model: str = "deepseek-ai/DeepSeek-V3"
+    llm_model: str = "deepseek-v4-flash"
     embedding_model: str = "BAAI/bge-m3"
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
 
@@ -35,6 +40,8 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# fail-fast：数据库密码必须显式配置（.env），禁止空/弱默认值静默启动
+# fail-fast：数据库密码与 DeepSeek 官方 Key 必须显式配置（.env），禁止空/弱默认值静默启动
 if not settings.mysql_password:
     raise RuntimeError("MYSQL_PASSWORD 未配置：请在 backend-ai/.env 中设置数据库密码（禁止弱默认凭据启动）")
+if not settings.deepseek_api_key:
+    raise RuntimeError("DEEPSEEK_API_KEY 未配置：请在 backend-ai/.env 中设置 DeepSeek 官方 API Key")

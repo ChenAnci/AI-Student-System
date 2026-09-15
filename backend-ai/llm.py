@@ -1,4 +1,4 @@
-"""硅基流动 SiliconFlow 模型封装：LLM / Embedding / Rerank。"""
+"""模型封装：LLM 走 DeepSeek 官方，Embedding / Rerank 走硅基流动 SiliconFlow。"""
 from typing import Any
 
 import httpx
@@ -8,11 +8,11 @@ from config import settings
 
 
 def get_llm() -> ChatOpenAI:
-    """对话模型（DeepSeek-V3）。"""
+    """对话模型（DeepSeek 官方 deepseek-v4-flash，OpenAI 兼容接口）。"""
     return ChatOpenAI(
         model=settings.llm_model,
-        api_key=settings.siliconflow_api_key,
-        base_url=settings.siliconflow_base_url,
+        api_key=settings.deepseek_api_key,
+        base_url=settings.deepseek_base_url,
         temperature=settings.llm_temperature,
         max_tokens=settings.llm_max_tokens,
         timeout=60,
@@ -20,7 +20,7 @@ def get_llm() -> ChatOpenAI:
 
 
 def get_embeddings() -> OpenAIEmbeddings:
-    """向量模型（BGE-M3）。"""
+    """向量模型（BGE-M3，SiliconFlow；DeepSeek 官方不提供 embedding）。"""
     return OpenAIEmbeddings(
         model=settings.embedding_model,
         api_key=settings.siliconflow_api_key,
