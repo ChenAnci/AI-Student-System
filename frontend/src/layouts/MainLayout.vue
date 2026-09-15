@@ -56,6 +56,7 @@ const menus = computed<MenuItem[]>(() => {
   const role = userStore.role()
   if (role === 'ADMIN') {
     return [
+      { path: '/admin/stats', title: '数据统计', icon: 'PieChart' },
       { path: '/admin/accounts', title: '账号管理', icon: 'User' },
       { path: '/admin/courses', title: '课程管理', icon: 'Reading' },
       { path: '/admin/grade-audit', title: '成绩审核', icon: 'EditPen' },
@@ -66,7 +67,8 @@ const menus = computed<MenuItem[]>(() => {
   if (role === 'TEACHER') {
     return [
       { path: '/teacher/courses', title: '我的课程', icon: 'Reading' },
-      { path: '/teacher/grade-entry', title: '成绩管理', icon: 'EditPen' }
+      { path: '/teacher/grade-entry', title: '成绩管理', icon: 'EditPen' },
+      { path: '/teacher/stats', title: '成绩统计', icon: 'TrendCharts' }
     ]
   }
   return [

@@ -23,7 +23,9 @@ const routes: RouteRecordRaw[] = [
       // 教师端
       { path: 'teacher/courses', name: 'TeacherCourses', component: () => import('@/views/teacher/MyCoursesView.vue'), meta: { roles: ['TEACHER'], title: '我的课程' } },
       { path: 'teacher/grade-entry/:courseId?', name: 'GradeEntry', component: () => import('@/views/teacher/GradeEntryView.vue'), meta: { roles: ['TEACHER'], title: '成绩管理' } },
+      { path: 'teacher/stats', name: 'TeacherStats', component: () => import('@/views/teacher/TeacherStatsView.vue'), meta: { roles: ['TEACHER'], title: '成绩统计' } },
       // 教秘端
+      { path: 'admin/stats', name: 'AdminStats', component: () => import('@/views/admin/StatsView.vue'), meta: { roles: ['ADMIN'], title: '数据统计' } },
       { path: 'admin/accounts', name: 'AccountManage', component: () => import('@/views/admin/AccountManage.vue'), meta: { roles: ['ADMIN'], title: '账号管理' } },
       { path: 'admin/courses', name: 'AdminCourses', component: () => import('@/views/admin/CourseManage.vue'), meta: { roles: ['ADMIN'], title: '课程管理' } },
       { path: 'admin/grade-audit', name: 'GradeAudit', component: () => import('@/views/admin/GradeAudit.vue'), meta: { roles: ['ADMIN'], title: '成绩审核' } },
