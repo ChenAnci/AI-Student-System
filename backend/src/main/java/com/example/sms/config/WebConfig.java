@@ -27,6 +27,7 @@ public class WebConfig implements WebMvcConfigurer {
                         "/swagger-resources/**", "/webjars/**")
                 .excludePathPatterns(
                         "/api/auth/login",
+                        "/api/oauth/**",
                         "/favicon.ico"
                 );
         // Knife4j 开启时才放行文档相关路径，否则接口文档页面/定义同样要求认证（fail-closed）
