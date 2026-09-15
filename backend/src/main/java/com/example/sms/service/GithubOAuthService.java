@@ -86,6 +86,7 @@ public class GithubOAuthService {
             LoginResponse resp = authService.issueByUserNo(binding.getUserNo());
             vo.setStatus("LOGIN_SUCCESS");
             vo.setToken(resp.getToken());
+            vo.setUserId(resp.getUserId());
             vo.setUserNo(resp.getUserNo());
             vo.setRealName(resp.getRealName());
             vo.setRoleType(resp.getRoleType());

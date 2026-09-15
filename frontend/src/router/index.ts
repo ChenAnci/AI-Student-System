@@ -16,6 +16,18 @@ const routes: RouteRecordRaw[] = [
     meta: { public: true }
   },
   {
+    path: '/oauth/callback',
+    name: 'OAuthCallback',
+    component: () => import('@/views/OAuthCallback.vue'),
+    meta: { public: true, title: '登录中' }
+  },
+  {
+    path: '/oauth/bind',
+    name: 'OAuthBind',
+    component: () => import('@/views/OAuthBind.vue'),
+    meta: { public: true, title: '绑定账号' }
+  },
+  {
     path: '/',
     component: () => import('@/layouts/MainLayout.vue'),
     redirect: '/student/dashboard',

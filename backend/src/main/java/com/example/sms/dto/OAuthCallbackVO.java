@@ -18,6 +18,8 @@ public class OAuthCallbackVO {
     private String providerUid;
 
     /** 登录成功的用户信息（前端直接构造登录态，免二次请求） */
+    private Long userId;
+
     private String userNo;
 
     private String realName;

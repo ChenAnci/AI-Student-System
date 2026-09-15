@@ -50,6 +50,7 @@ public class OAuthController {
         OAuthCallbackVO vo = githubOAuthService.handleCallback(code, state);
         if ("LOGIN_SUCCESS".equals(vo.getStatus())) {
             return new RedirectView(FRONT_BASE + "/oauth/callback?token=" + enc(vo.getToken())
+                    + "&userId=" + (vo.getUserId() == null ? "" : vo.getUserId())
                     + "&userNo=" + enc(vo.getUserNo())
                     + "&realName=" + enc(vo.getRealName())
                     + "&roleType=" + enc(vo.getRoleType()));
