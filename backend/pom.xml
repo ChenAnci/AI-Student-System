@@ -82,6 +82,16 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- Redis：高并发共享状态（登录锁定 / OAuth state / 限流 / 数据缓存） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+        </dependency>
+
         <!-- EasyExcel 导入导出 -->
         <dependency>
             <groupId>com.alibaba</groupId>

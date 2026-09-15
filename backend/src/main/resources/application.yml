@@ -14,6 +14,18 @@ spring:
     multipart:
       max-file-size: 10MB
       max-request-size: 10MB
+  # Redis：多实例共享状态（登录锁定 / OAuth state / 限流 / 业务缓存），凭据通过环境变量注入
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: ${REDIS_DATABASE:0}
+    timeout: 3000ms
+    lettuce:
+      pool:
+        max-active: 16
+        max-idle: 8
+        min-idle: 0
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
