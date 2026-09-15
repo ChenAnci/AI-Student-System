@@ -47,6 +47,8 @@ public class JwtInterceptor implements HandlerInterceptor {
             {"/api/enrollments/*/students/*", "ADMIN"},
             {"/api/enrollments/monitor", "ADMIN"},
             {"/api/enrollments/**", "STUDENT"},
+            {"/api/stats/admin", "ADMIN"},
+            {"/api/stats/teacher", "TEACHER"},
             {"/api/ai/**", "STUDENT,ADMIN"},
     };
 
