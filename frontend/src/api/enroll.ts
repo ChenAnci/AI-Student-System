@@ -1,8 +1,15 @@
 import http from './http'
 import type { CourseCardVO, EnrollMonitorVO } from '@/types'
 
-export function courseCenter() {
-  return http.get('/enrollments/center') as Promise<CourseCardVO[]>
+/** 选课中心查询参数（关键词 / 学分范围，均为可选） */
+export interface CourseCenterQuery {
+  keyword?: string
+  minCredit?: number
+  maxCredit?: number
+}
+
+export function courseCenter(params?: CourseCenterQuery) {
+  return http.get('/enrollments/center', { params }) as Promise<CourseCardVO[]>
 }
 
 export function enroll(courseId: number) {
