@@ -133,3 +133,39 @@ export interface CourseStudentItem {
   mark: string
   locked: boolean
 }
+
+/** 名称-数值统计项 */
+export interface NameValue {
+  name: string
+  value: number
+}
+
+/** 教秘端全校数据统计 */
+export interface AdminStats {
+  studentCount: number
+  staffCount: number
+  teacherCount: number
+  courseCount: number
+  enrollmentCount: number
+  majorDistribution: NameValue[]
+  departmentCourses: NameValue[]
+  topEnrolledCourses: NameValue[]
+  scoreBands: NameValue[]
+  courseStatus: NameValue[]
+}
+
+/** 教师课程成绩统计项 */
+export interface CourseScoreStat {
+  courseName: string
+  avgScore: number
+  studentCount: number
+  passRate: number
+}
+
+/** 教师端成绩统计 */
+export interface TeacherStats {
+  courseCount: number
+  studentTotal: number
+  courseScores: CourseScoreStat[]
+  scoreBands: NameValue[]
+}
