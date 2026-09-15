@@ -40,7 +40,7 @@
 |---|---|
 | 前端 | Vue 3 + TypeScript + Vite + Element Plus + ECharts + Pinia |
 | 后端 | Spring Boot 2.7 + Java 17 + MyBatis-Plus + MySQL 8.0 |
-| AI 服务 | Python + FastAPI + LangChain / LangGraph + ChromaDB |
+| AI 服务 | Python + FastAPI + LangChain / LangGraph + ChromaDB + BM25（jieba） |
 | AI 模型 | LLM：DeepSeek 官方 `deepseek-v4-flash`；向量/重排：SiliconFlow BGE-M3 / BGE-Reranker-v2-M3 |
 | 安全 | JWT（HS256）+ BCrypt + 角色权限拦截器 |
 
@@ -56,23 +56,28 @@
 │   JWT 鉴权 / 角色权限 / 业务逻辑            │
 └──────┬───────────────────────────┬──────────┘
        │                           │ 内部 HTTP（透传登录态）
-┌──────▼───────────┐     ┌────────▼──────────────────┐
-│   MySQL 8.0      │     │  FastAPI AI 服务          │
-│  学生/课程/成绩   │     │  (8000, 仅本机 127.0.0.1) │
-└──────────────────┘     │  LangGraph 工作流         │
-                         │  ChromaDB 向量库          │
-                         └───────┬───────────────────┘
-                                 │ OpenAI 兼容 API
-              ┌──────────────────┴──────────────┐
-              ▼                                  ▼
-   DeepSeek 官方 API                   SiliconFlow API
-   deepseek-v4-flash                   BGE-M3 / BGE-Reranker
-   （对话生成）                          （向量检索，仅选课建议）
+┌──────▼───────────┐     ┌────────▼──────────────────────┐
+│   MySQL 8.0      │     │  FastAPI AI 服务              │
+│ 学生/课程/成绩   │◄────│  (8000, 仅本机 127.0.0.1)     │
+└──────┬───────────┘     │  LangGraph：提问重写→混合检索 │
+       │ 只读             │  ChromaDB 向量 + BM25 关键词  │
+       └─────────────────►└────────┬──────────────────────┘
+                                   │ OpenAI 兼容 API
+                ┌──────────────────┴──────────────┐
+                ▼                                  ▼
+     DeepSeek 官方 API                   SiliconFlow API
+     deepseek-v4-flash                   BGE-M3 / BGE-Reranker
+     （对话生成）                          （混合检索向量化 / 重排）
 ```
+
+> **说明**：
+> - AI 服务独立部署、仅监听本机回环地址；Spring 通过内部 HTTP 透传登录态（Bearer JWT），AI 服务独立验签 + 限流。
+> - AI 服务**直连 MySQL（只读）**：启动时同步课程目录构建 ChromaDB 向量库与 BM25 关键词索引，运行时查询学生数据；与 Spring 共用同一数据库。
+> - 「选课建议 / 自由问答」走 **提问重写 → 混合检索（向量 + BM25 → RRF 融合 → BGE-Reranker 重排）→ LLM 生成**；DeepSeek 负责对话生成，SiliconFlow 负责向量化与重排。
 
 ## AI 智能助手架构
 
-AI 服务（`backend-ai/`）独立部署，基于 **FastAPI + LangGraph 智能体编排 + ChromaDB 向量检索**，为三类角色提供学业问答与选课建议。
+AI 服务（`backend-ai/`）独立部署，基于 **FastAPI + LangGraph 智能体编排 + 混合检索（向量 + BM25）**，为三类角色提供学业问答与选课建议。
 
 ### 模型供应（双供应商）
 
