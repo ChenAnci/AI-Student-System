@@ -14,8 +14,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -32,12 +34,15 @@ public class EnrollController {
     @Autowired
     private CourseService courseService;
 
-    @ApiOperation("学生选课中心（已发布课程）")
+    @ApiOperation("学生选课中心（已发布课程，支持关键词/学分范围筛选）")
     @GetMapping("/center")
-    public Result<List<CourseCardVO>> center() {
+    public Result<List<CourseCardVO>> center(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) BigDecimal minCredit,
+            @RequestParam(required = false) BigDecimal maxCredit) {
         Long studentId = UserContext.getUserId();
         return Result.success(courseService.listPublishedForStudent(studentId,
-                enrollService.enrolledCourseIds(studentId)));
+                enrollService.enrolledCourseIds(studentId), keyword, minCredit, maxCredit));
     }
 
     @ApiOperation("选课")

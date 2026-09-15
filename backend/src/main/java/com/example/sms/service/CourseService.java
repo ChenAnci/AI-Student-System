@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -150,11 +151,10 @@ public class CourseService {
         }).collect(Collectors.toList());
     }
 
-    /** 学生选课中心：已发布课程列表（含是否已选） */
-    public List<CourseCardVO> listPublishedForStudent(Long studentId, List<Long> enrolledCourseIds) {
-        List<Course> courses = courseMapper.selectList(new LambdaQueryWrapper<Course>()
-                .eq(Course::getStatus, "PUBLISHED")
-                .orderByDesc(Course::getUpdatedAt));
+    /** 学生选课中心：已发布课程列表（关键词/学分范围筛选，含是否已选） */
+    public List<CourseCardVO> listPublishedForStudent(Long studentId, List<Long> enrolledCourseIds,
+                                                      String keyword, BigDecimal minCredit, BigDecimal maxCredit) {
+        List<Course> courses = courseMapper.selectCenterPublished(keyword, minCredit, maxCredit);
         Map<Long, Staff> teacherMap = loadTeachers(courses);
         return courses.stream().map(c -> {
             CourseCardVO vo = new CourseCardVO();
