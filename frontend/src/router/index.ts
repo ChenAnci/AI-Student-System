@@ -4,6 +4,12 @@ import type { RoleType } from '@/types'
 
 const routes: RouteRecordRaw[] = [
   {
+    path: '/',
+    name: 'Portal',
+    component: () => import('@/views/PortalView.vue'),
+    meta: { public: true, title: '门户首页' }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/LoginView.vue'),
@@ -33,7 +39,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'admin/ai-assistant', name: 'AdminAiAssistant', component: () => import('@/views/student/AiAssistant.vue'), meta: { roles: ['ADMIN'], title: 'AI 智能助手' } }
     ]
   },
-  { path: '/:pathMatch(.*)*', redirect: '/login' }
+  { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 
 const router = createRouter({

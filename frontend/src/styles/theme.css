@@ -1,0 +1,70 @@
+/* 全局设计变量：深色科技风，蓝紫渐变，适配项目蓝色系 */
+:root {
+  /* 背景 */
+  --bg-deep: #0a0f1f;
+  --bg-deep-2: #0d1326;
+  --bg-card: #101828;
+  --bg-elevated: #151d33;
+
+  /* 强调色：项目蓝 -> 紫 渐变 */
+  --brand-blue: #409eff;
+  --brand-cyan: #6cd7ff;
+  --brand-purple: #7c3aed;
+  --brand-grad: linear-gradient(135deg, #409eff 0%, #7c3aed 60%, #9d5cff 100%);
+  --brand-grad-soft: linear-gradient(135deg, rgba(64, 158, 255, 0.9) 0%, rgba(124, 58, 237, 0.9) 100%);
+
+  /* 文字 */
+  --text-primary: #f2f5ff;
+  --text-secondary: #9aa5c1;
+  --text-muted: #5d6886;
+
+  /* 边框 / 分隔线 */
+  --border-soft: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  /* 玻璃质感 */
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-blur: blur(16px);
+
+  /* 圆角 */
+  --radius-lg: 18px;
+  --radius-md: 12px;
+}
+
+/* 渐变文字工具类 */
+.grad-text {
+  background: var(--brand-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* 通用渐隐渐入动画 */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  opacity: 0;
+  animation: fade-in-up 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+/* 滚动触发渐入 */
+.scroll-trigger {
+  opacity: 0;
+  transform: translateY(32px);
+  transition: opacity 0.8s cubic-bezier(0.22, 0.61, 0.36, 1), transform 0.8s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.scroll-trigger.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
