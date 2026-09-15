@@ -11,10 +11,11 @@ import com.example.sms.mapper.StudentMapper;
 import com.example.sms.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.Locale;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 登录认证服务
@@ -31,7 +32,13 @@ public class AuthService {
     @Autowired
     private JwtUtil jwtUtil;
 
+    @Autowired
+    private StringRedisTemplate redis;
+
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder(10);
+
+    /** Redis Key 前缀：登录失败计数（锁定键统一小写，配合 MySQL 大小写不敏感排序规则） */
+    private static final String LOGIN_FAIL_KEY = "sms:login:fail:";
 
     /**
      * 登录：学号（S 开头）查学生表，工号查教职工表；带失败锁定保护。
@@ -43,7 +50,7 @@ public class AuthService {
         checkLoginLocked(lockKey);
         try {
             LoginResponse resp = doLogin(username, dto.getPassword());
-            loginAttempts.remove(lockKey);
+            redis.delete(LOGIN_FAIL_KEY + lockKey);
             return resp;
         } catch (BusinessException e) {
             recordLoginFailure(lockKey);
@@ -58,34 +65,26 @@ public class AuthService {
         return loginStaff(username, password);
     }
 
-    // ===== 登录防爆破（内存级：连续 5 次失败锁定 5 分钟，重启后失效；多实例部署建议换 Redis）=====
+    // ===== 登录防爆破（Redis 共享：连续 5 次失败锁定 5 分钟，多实例部署计数一致；key 自动过期解锁）=====
 
     private static final int MAX_FAIL_ATTEMPTS = 5;
-    private static final long LOCK_MILLIS = 5 * 60 * 1000L;
-    private final ConcurrentHashMap<String, LoginAttempt> loginAttempts = new ConcurrentHashMap<>();
-
-    private static class LoginAttempt {
-        int failCount;
-        long lockedUntil;
-    }
+    private static final long LOCK_SECONDS = 5 * 60L;
 
     private void checkLoginLocked(String username) {
-        LoginAttempt att = loginAttempts.get(username);
-        if (att != null && att.lockedUntil > System.currentTimeMillis()) {
-            long remainMin = (att.lockedUntil - System.currentTimeMillis()) / 60_000 + 1;
+        String count = redis.opsForValue().get(LOGIN_FAIL_KEY + username);
+        if (count != null && Integer.parseInt(count) >= MAX_FAIL_ATTEMPTS) {
+            Long ttl = redis.getExpire(LOGIN_FAIL_KEY + username, TimeUnit.SECONDS);
+            long remainMin = (ttl == null || ttl <= 0) ? 1 : (ttl / 60) + 1;
             throw new BusinessException("登录失败次数过多，请 " + remainMin + " 分钟后重试");
         }
     }
 
     private void recordLoginFailure(String username) {
-        LoginAttempt att = loginAttempts.computeIfAbsent(username, k -> new LoginAttempt());
-        synchronized (att) {
-            if (att.lockedUntil > System.currentTimeMillis()) return;
-            att.failCount++;
-            if (att.failCount >= MAX_FAIL_ATTEMPTS) {
-                att.lockedUntil = System.currentTimeMillis() + LOCK_MILLIS;
-                att.failCount = 0;
-            }
+        String key = LOGIN_FAIL_KEY + username;
+        Long count = redis.opsForValue().increment(key);
+        // 首次失败时设置过期时间（INCR 原子自增，仅首次返回 1）
+        if (count != null && count == 1) {
+            redis.expire(key, LOCK_SECONDS, TimeUnit.SECONDS);
         }
     }
 
