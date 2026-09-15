@@ -1,0 +1,36 @@
+# --- IDE / 编辑器 ---
+.idea/
+.vscode/
+*.iml
+.trae/
+
+# --- 依赖与构建产物 ---
+node_modules/
+dist/
+target/
+*.tsbuildinfo
+*.log
+run.log
+dev.log
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+chroma/
+.pytest_cache/
+.mypy_cache/
+
+# --- 敏感配置（含真实 JWT 密钥，禁止入库） ---
+.env
+backend-ai/.env
+
+# --- 临时脚本与本地文件 ---
+verify_*.ps1
+verify_*.py
+*.tmp
+*.swp
+
+# --- 安全审查报告（含漏洞细节，不随源码发布） ---
+security_best_practices_report.md

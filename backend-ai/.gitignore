@@ -1,0 +1,15 @@
+# 密钥与本地配置
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ChromaDB 数据
+chroma/
+
+# 测试与缓存
+.pytest_cache/
+.mypy_cache/
