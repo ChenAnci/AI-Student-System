@@ -130,4 +130,72 @@ public class AuthService {
                 student.getRealName(), "STUDENT"));
         return resp;
     }
+
+    // ===== OAuth 登录复用：校验账号密码 / 按账号直接签发 =====
+
+    /**
+     * 校验账号密码并签发（供 OAuth 绑定场景复用；不做失败锁定计数）。
+     */
+    public LoginResponse verifyAndLogin(String username, String password) {
+        if (username.toUpperCase().startsWith("S") && !username.equalsIgnoreCase("admin")) {
+            Student s = studentMapper.selectOne(
+                    new LambdaQueryWrapper<Student>().eq(Student::getStudentNo, username));
+            if (s == null || !encoder.matches(password, s.getPasswordHash())) {
+                throw new BusinessException("学号或密码错误");
+            }
+            return buildStudentResponse(s);
+        }
+        Staff st = staffMapper.selectOne(
+                new LambdaQueryWrapper<Staff>().eq(Staff::getStaffNo, username));
+        if (st == null || !encoder.matches(password, st.getPasswordHash())) {
+            throw new BusinessException("工号或密码错误");
+        }
+        return buildStaffResponse(st);
+    }
+
+    /**
+     * 按工号/学号直接签发（OAuth 已绑定账号，绑定关系建立时已校验存在与启用）。
+     */
+    public LoginResponse issueByUserNo(String userNo) {
+        if (userNo.toUpperCase().startsWith("S") && !userNo.equalsIgnoreCase("admin")) {
+            Student s = studentMapper.selectOne(
+                    new LambdaQueryWrapper<Student>().eq(Student::getStudentNo, userNo));
+            if (s == null || !"ENABLED".equals(s.getStatus())) {
+                throw new BusinessException("账号不存在或已停用");
+            }
+            return buildStudentResponse(s);
+        }
+        Staff st = staffMapper.selectOne(
+                new LambdaQueryWrapper<Staff>().eq(Staff::getStaffNo, userNo));
+        if (st == null || !"ENABLED".equals(st.getStatus())) {
+            throw new BusinessException("账号不存在或已停用");
+        }
+        return buildStaffResponse(st);
+    }
+
+    private LoginResponse buildStaffResponse(Staff staff) {
+        LoginResponse resp = new LoginResponse();
+        resp.setUserId(staff.getId());
+        resp.setUserNo(staff.getStaffNo());
+        resp.setRealName(staff.getRealName());
+        resp.setRoleType(staff.getRoleType());
+        resp.setDepartment(staff.getDepartment());
+        resp.setToken(jwtUtil.generateToken(staff.getId(), staff.getStaffNo(),
+                staff.getRealName(), staff.getRoleType()));
+        return resp;
+    }
+
+    private LoginResponse buildStudentResponse(Student student) {
+        LoginResponse resp = new LoginResponse();
+        resp.setUserId(student.getId());
+        resp.setUserNo(student.getStudentNo());
+        resp.setRealName(student.getRealName());
+        resp.setRoleType("STUDENT");
+        resp.setDepartment(student.getDepartment());
+        resp.setMajor(student.getMajor());
+        resp.setClassName(student.getClassName());
+        resp.setToken(jwtUtil.generateToken(student.getId(), student.getStudentNo(),
+                student.getRealName(), "STUDENT"));
+        return resp;
+    }
 }
