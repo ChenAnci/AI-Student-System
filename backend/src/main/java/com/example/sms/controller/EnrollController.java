@@ -1,5 +1,6 @@
 package com.example.sms.controller;
 
+import com.example.sms.common.BusinessException;
 import com.example.sms.common.Result;
 import com.example.sms.service.CourseService;
 import com.example.sms.service.EnrollService;
@@ -40,6 +41,22 @@ public class EnrollController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) BigDecimal minCredit,
             @RequestParam(required = false) BigDecimal maxCredit) {
+        // 输入校验：关键词限长（防超长 %..% 模糊扫描 DoS），学分范围合法
+        if (keyword != null) {
+            keyword = keyword.trim();
+            if (keyword.length() > 50) {
+                throw new BusinessException("搜索关键词过长（最多 50 字符）");
+            }
+        }
+        if (minCredit != null && minCredit.signum() < 0) {
+            throw new BusinessException("最低学分不能为负数");
+        }
+        if (maxCredit != null && maxCredit.signum() < 0) {
+            throw new BusinessException("最高学分不能为负数");
+        }
+        if (minCredit != null && maxCredit != null && minCredit.compareTo(maxCredit) > 0) {
+            throw new BusinessException("最低学分不能大于最高学分");
+        }
         Long studentId = UserContext.getUserId();
         return Result.success(courseService.listPublishedForStudent(studentId,
                 enrollService.enrolledCourseIds(studentId), keyword, minCredit, maxCredit));
