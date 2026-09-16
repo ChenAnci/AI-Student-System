@@ -43,19 +43,22 @@ public class OAuthController {
         return Result.success(Map.of("url", githubOAuthService.buildAuthorizeUrl()));
     }
 
-    @ApiOperation("GitHub 授权回调（302 重定向到前端回调页，携带登录结果）")
+    @ApiOperation("GitHub 授权回调（302 重定向到前端回调页，携带一次性授权码）")
     @GetMapping("/github/callback")
     public RedirectView callback(@RequestParam(value = "code", required = false) String code,
                                  @RequestParam(value = "state", required = false) String state) {
         OAuthCallbackVO vo = githubOAuthService.handleCallback(code, state);
         if ("LOGIN_SUCCESS".equals(vo.getStatus())) {
-            return new RedirectView(FRONT_BASE + "/oauth/callback?token=" + enc(vo.getToken())
-                    + "&userId=" + (vo.getUserId() == null ? "" : vo.getUserId())
-                    + "&userNo=" + enc(vo.getUserNo())
-                    + "&realName=" + enc(vo.getRealName())
-                    + "&roleType=" + enc(vo.getRoleType()));
+            // 回调 URL 不携带 JWT，携带一次性授权码（回调页凭此换取登录态）
+            return new RedirectView(FRONT_BASE + "/oauth/callback?authCode=" + enc(vo.getAuthCode()));
         }
         return new RedirectView(FRONT_BASE + "/oauth/callback?needBind=1&providerUid=" + enc(vo.getProviderUid()));
+    }
+
+    @ApiOperation("用一次性授权码换取登录态（回调页调用，避免 JWT 暴露在 URL）")
+    @PostMapping("/github/exchange")
+    public Result<LoginResponse> exchange(@RequestBody Map<String, String> body) {
+        return Result.success(githubOAuthService.exchangeAuthCode(body.get("authCode")));
     }
 
     @ApiOperation("绑定现有账号并登录")

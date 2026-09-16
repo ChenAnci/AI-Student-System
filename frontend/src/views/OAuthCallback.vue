@@ -12,8 +12,8 @@ import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { exchangeGithub } from '@/api/oauth'
 import { useUserStore } from '@/stores/user'
-import type { LoginResponse } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -26,25 +26,25 @@ function homeByRole(role: string): string {
   return '/student/dashboard'
 }
 
-onMounted(() => {
-  const token = route.query.token as string | undefined
+onMounted(async () => {
+  const authCode = route.query.authCode as string | undefined
   const needBind = route.query.needBind as string | undefined
   const providerUid = route.query.providerUid as string | undefined
 
-  if (token && route.query.roleType) {
-    // 后端回调 302 已携带完整登录信息，直接构造登录态
-    const data = {
-      token,
-      userId: Number(route.query.userId || 0),
-      userNo: String(route.query.userNo || ''),
-      realName: String(route.query.realName || ''),
-      roleType: route.query.roleType as LoginResponse['roleType']
-    } as LoginResponse
-    userStore.setLogin(data)
-    loading.value = false
-    ElMessage.success(`欢迎回来，${data.realName}`)
-    router.replace(homeByRole(data.roleType))
-    return
+  if (authCode) {
+    // 后端回调只携带一次性授权码（URL 不含 JWT），凭授权码换取完整登录态
+    try {
+      const data = await exchangeGithub({ authCode })
+      userStore.setLogin(data)
+      loading.value = false
+      ElMessage.success(`欢迎回来，${data.realName}`)
+      router.replace(homeByRole(data.roleType))
+      return
+    } catch {
+      loading.value = false
+      router.replace('/login')
+      return
+    }
   }
   if (needBind && providerUid) {
     loading.value = false

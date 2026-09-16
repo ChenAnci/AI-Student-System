@@ -6,10 +6,12 @@ import com.example.sms.dto.LoginResponse;
 import com.example.sms.dto.OAuthCallbackVO;
 import com.example.sms.entity.OAuthBinding;
 import com.example.sms.mapper.OAuthBindingMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -20,7 +22,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * GitHub OAuth 登录服务：
@@ -35,7 +37,13 @@ public class GithubOAuthService {
     private static final String AUTH_URL = "https://github.com/login/oauth/authorize";
     private static final String TOKEN_URL = "https://github.com/login/oauth/access_token";
     private static final String USER_URL = "https://api.github.com/user";
-    private static final long STATE_TTL_MILLIS = 10 * 60 * 1000L;
+    /** OAuth state 有效期（与 Redis key TTL 一致，10 分钟） */
+    private static final long STATE_TTL_SECONDS = 10 * 60L;
+    private static final String STATE_KEY = "sms:oauth:state:";
+
+    /** 登录态授权码 key / 有效期（回调页凭此换取登录态，120 秒一次性，避免 JWT 暴露在 URL） */
+    private static final long AUTH_CODE_TTL_SECONDS = 120;
+    private static final String AUTH_CODE_KEY = "sms:oauth:code:";
 
     @Value("${oauth.github.client-id:}")
     private String clientId;
@@ -52,11 +60,12 @@ public class GithubOAuthService {
     @Autowired
     private AuthService authService;
 
+    @Autowired
+    private StringRedisTemplate redis;
+
     private final HttpClient http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
     private final ObjectMapper mapper = new ObjectMapper();
     private final SecureRandom random = new SecureRandom();
-    /** state 缓存：state -> 过期时间戳（一次性使用） */
-    private final ConcurrentHashMap<String, Long> stateStore = new ConcurrentHashMap<>();
 
     /** 1. 生成 GitHub 授权跳转地址（未配置时抛业务提示） */
     public String buildAuthorizeUrl() {
@@ -85,11 +94,8 @@ public class GithubOAuthService {
         if (binding != null) {
             LoginResponse resp = authService.issueByUserNo(binding.getUserNo());
             vo.setStatus("LOGIN_SUCCESS");
-            vo.setToken(resp.getToken());
-            vo.setUserId(resp.getUserId());
-            vo.setUserNo(resp.getUserNo());
-            vo.setRealName(resp.getRealName());
-            vo.setRoleType(resp.getRoleType());
+            // 回调 URL 不携带 JWT，改为一次性授权码（Redis 短 TTL 缓存登录态）
+            vo.setAuthCode(issueAuthCode(resp));
         } else {
             vo.setStatus("NEED_BIND");
             vo.setProviderUid(uid);
@@ -116,6 +122,35 @@ public class GithubOAuthService {
     }
 
     // ===== 内部工具 =====
+
+    /** 生成一次性授权码并缓存登录态（Redis 短 TTL），回调 URL 不携带 JWT（Q-5） */
+    private String issueAuthCode(LoginResponse resp) {
+        String code = genState();
+        try {
+            redis.opsForValue().set(AUTH_CODE_KEY + code, mapper.writeValueAsString(resp),
+                    AUTH_CODE_TTL_SECONDS, TimeUnit.SECONDS);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException("登录态生成失败，请重新登录");
+        }
+        return code;
+    }
+
+    /** 用一次性授权码换取登录态（校验存在 + 原子删除，仅能使用一次） */
+    public LoginResponse exchangeAuthCode(String authCode) {
+        if (authCode == null || authCode.isBlank()) {
+            throw new BusinessException("授权码缺失，请重新登录");
+        }
+        String json = redis.opsForValue().get(AUTH_CODE_KEY + authCode);
+        if (json == null) {
+            throw new BusinessException("授权码无效或已过期，请重新登录");
+        }
+        redis.delete(AUTH_CODE_KEY + authCode);
+        try {
+            return mapper.readValue(json, LoginResponse.class);
+        } catch (Exception e) {
+            throw new BusinessException("登录态解析失败，请重新登录");
+        }
+    }
 
     private OAuthBinding findBinding(String provider, String uid) {
         return bindingMapper.selectOne(new LambdaQueryWrapper<OAuthBinding>()
@@ -169,11 +204,8 @@ public class GithubOAuthService {
         byte[] bytes = new byte[24];
         random.nextBytes(bytes);
         String state = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        stateStore.put(state, System.currentTimeMillis() + STATE_TTL_MILLIS);
-        // 惰性清理过期 state，防止缓存无界增长
-        if (stateStore.size() > 1000) {
-            stateStore.entrySet().removeIf(e -> e.getValue() < System.currentTimeMillis());
-        }
+        // Redis 存储并设置 TTL（多实例共享；过期自动清理，无需手动回收）
+        redis.opsForValue().set(STATE_KEY + state, "1", STATE_TTL_SECONDS, TimeUnit.SECONDS);
         return state;
     }
 
@@ -181,8 +213,8 @@ public class GithubOAuthService {
         if (state == null) {
             return false;
         }
-        Long expire = stateStore.remove(state);
-        return expire != null && expire > System.currentTimeMillis();
+        // 原子删除：返回 true 表示存在且仅能消费一次（一次性 + TTL 过期双重兜底）
+        return Boolean.TRUE.equals(redis.delete(STATE_KEY + state));
     }
 
     private String enc(String s) {
