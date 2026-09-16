@@ -25,7 +25,7 @@
       <el-header class="header">
         <div class="page-title">{{ $route.meta.title }}</div>
         <div class="user-area">
-          <NotificationBell />
+          <NotificationBell v-if="isStudent" />
           <el-tag size="small" :type="roleTagType" effect="dark">{{ roleLabel }}</el-tag>
           <span class="username">{{ userStore.displayName() }}</span>
           <el-button type="danger" link @click="handleLogout">退出登录</el-button>
@@ -101,10 +101,14 @@ const roleTagType = computed(() => {
 })
 
 const notificationStore = useNotificationStore()
+// 站内通知收件箱/未读/WS 实时推送仅面向学生角色（接口按 STUDENT 鉴权），管理员/教师不挂载铃铛
+const isStudent = computed(() => userStore.role() === 'STUDENT')
 
 onMounted(() => {
-  notificationStore.refreshUnread()
-  notificationStore.connect()
+  if (isStudent.value) {
+    notificationStore.refreshUnread()
+    notificationStore.connect()
+  }
 })
 
 onUnmounted(() => {

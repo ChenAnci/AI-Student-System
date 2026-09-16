@@ -28,7 +28,8 @@ export const useNotificationStore = defineStore('notification', () => {
   function connect() {
     const userStore = useUserStore()
     const token = getToken()
-    if (!token || !userStore.isLogin()) return
+    // 实时推送仅面向学生角色（服务端 WS 仅接受 STUDENT 认证），防御性拦截其它角色
+    if (!token || !userStore.isLogin() || userStore.role() !== 'STUDENT') return
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
     // 安全：JWT 不在握手 URL query 中传输（避免进入访问日志），连接后通过首条 AUTH 消息认证
     ws = new WebSocket(WS_BASE)
