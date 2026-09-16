@@ -42,11 +42,14 @@ public class RedisConfig {
 
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory factory) {
-        // 多态反序列化白名单：仅允许项目实体包与 JDK 集合/时间类型，阻断未知 class 的 gadget 投毒（R-3）
+        // 多态反序列化白名单：项目实体包 + JDK 常用值类型（集合/时间/数值/字符串/包装类），
+        // 阻断未知 class 的 gadget 投毒（R-3）。缺 java.lang/java.math 会导致 BigDecimal 等字段反序列化被拒。
         BasicPolymorphicTypeValidator typeValidator = BasicPolymorphicTypeValidator.builder()
                 .allowIfSubType("com.example.sms.")
                 .allowIfSubType("java.util.")
                 .allowIfSubType("java.time.")
+                .allowIfSubType("java.lang.")
+                .allowIfSubType("java.math.")
                 .build();
         ObjectMapper mapper = new ObjectMapper();
         mapper.activateDefaultTyping(typeValidator, ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);

@@ -1,5 +1,8 @@
 <template>
   <div v-loading="loading">
+    <div class="stats-toolbar">
+      <el-button :loading="loading" @click="load">刷新数据</el-button>
+    </div>
     <!-- 统计卡片 -->
     <el-row :gutter="16">
       <el-col :span="6">
@@ -132,19 +135,26 @@ const bandOption = computed<EChartsOption>(() => {
   }
 })
 
-onMounted(async () => {
+async function load() {
   loading.value = true
   try {
     data.value = await getTeacherStats()
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(load)
 </script>
 
 <style scoped>
 .mt16 {
   margin-top: 16px;
+}
+.stats-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
 }
 .stat-item {
   text-align: center;

@@ -33,6 +33,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -57,6 +58,9 @@ class GradeServiceTest {
 
     @Mock
     private CourseGradeAuditMapper auditMapper;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private GradeService gradeService;
@@ -259,5 +263,43 @@ class GradeServiceTest {
         assertThat(rows.get(0).getScore()).isEqualByComparingTo("88");
         assertThat(rows.get(1).getScore()).isEqualByComparingTo("45");
         assertThat(rows.get(1).getMark()).isEqualTo("NORMAL");
+    }
+
+    // ==================== 成绩发布自动通知 ====================
+
+    @Test
+    @DisplayName("成绩发布：自动发送 GRADE_PUBLISH 通知给该课程选课学生")
+    void publish_shouldNotifyEnrolledStudents() {
+        course.setId(1L);
+        course.setCourseName("Web前端开发");
+        when(courseMapper.selectById(1L)).thenReturn(course);
+        CourseGradeAudit audit = new CourseGradeAudit();
+        audit.setCourseId(1L);
+        audit.setStatus("APPROVED");
+        when(auditMapper.selectOne(any())).thenReturn(audit);
+        when(studentCourseMapper.selectList(any())).thenReturn(Arrays.asList(sc1, sc2));
+        // recalcStudentCredits：无其他已发布课程 → 重置学分/GPA（sc1.studentId=1L, sc2.studentId=2L）
+        when(studentMapper.selectById(1L)).thenReturn(stu1);
+        when(studentMapper.selectById(2L)).thenReturn(stu2);
+        when(auditMapper.selectList(any())).thenReturn(java.util.Collections.emptyList());
+
+        gradeService.publish(1L);
+
+        verify(notificationService).sendSystem(eq("GRADE_PUBLISH"), eq("成绩已发布"), any(), any());
+        verify(auditMapper).updateById(any(CourseGradeAudit.class));
+    }
+
+    @Test
+    @DisplayName("成绩发布：未审核通过（非 APPROVED）不可发布，不发送通知")
+    void publish_shouldRejectWhenNotApproved() {
+        course.setId(1L);
+        when(courseMapper.selectById(1L)).thenReturn(course);
+        CourseGradeAudit audit = new CourseGradeAudit();
+        audit.setStatus("SUBMITTED");
+        when(auditMapper.selectOne(any())).thenReturn(audit);
+
+        assertThatThrownBy(() -> gradeService.publish(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("仅审核通过的课程可以发布");
     }
 }

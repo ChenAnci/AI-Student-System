@@ -1,10 +1,13 @@
 <template>
   <div v-loading="loading">
     <el-card shadow="never">
+      <el-page-header @back="$router.push('/teacher/courses')" content="成绩管理" />
       <div class="header-bar">
-        <div>
-          <el-page-header @back="$router.push('/teacher/courses')" :content="`成绩管理 - ${courseName}`" />
-          <div class="audit-info">
+        <div class="left">
+          <el-select v-model="selectedCourseId" filterable placeholder="请选择要管理的课程" style="width: 280px">
+            <el-option v-for="c in myCourses" :key="c.id" :label="`${c.courseCode} ${c.courseName}`" :value="c.id" />
+          </el-select>
+          <div v-if="selectedCourseId" class="audit-info">
             成绩流程状态：
             <el-tag size="small" :type="auditTagType">{{ auditText }}</el-tag>
             <template v-if="rejectReason">
@@ -54,7 +57,8 @@
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!loading && students.length === 0" description="该课程暂无学生选课" />
+      <el-empty v-if="!loading && !selectedCourseId" description="请先选择要管理的课程" />
+      <el-empty v-else-if="!loading && students.length === 0" description="该课程暂无学生选课" />
     </el-card>
   </div>
 </template>
@@ -73,7 +77,8 @@ import {
   submitGrades
 } from '@/api/grade'
 import { datedFilename, saveBlob } from '@/api/http'
-import type { CourseStudentItem } from '@/types'
+import { listMyCourses } from '@/api/course'
+import type { CourseStudentItem, MyCourseVO } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -82,11 +87,17 @@ const saving = ref(false)
 const importing = ref(false)
 const students = ref<CourseStudentItem[]>([])
 const audits = ref<Awaited<ReturnType<typeof myAudits>>>([])
+const myCourses = ref<MyCourseVO[]>([])
+const selectedCourseId = ref<number>(0)
 const locked = ref(false)
 const gradeFileRef = ref<HTMLInputElement>()
 
-const courseId = computed(() => Number(route.params.courseId))
-const courseName = computed(() => route.query.name as string || '课程')
+// 课程由页内选择器决定（支持从侧栏"成绩管理"直接进入并自行选课，不再强制从"我的课程"跳转）
+const courseId = computed(() => selectedCourseId.value)
+const courseName = computed(() => {
+  const c = myCourses.value.find((m) => m.id === selectedCourseId.value)
+  return c ? c.courseName : '课程'
+})
 
 const currentAudit = computed(() => audits.value.find((a) => a.courseId === courseId.value))
 
@@ -128,6 +139,7 @@ function onMarkChange(row: CourseStudentItem, val: string) {
 }
 
 async function load() {
+  if (!courseId.value) return
   loading.value = true
   try {
     audits.value = await myAudits()
@@ -212,18 +224,30 @@ async function handleImport(e: Event) {
   }
 }
 
+watch(selectedCourseId, (val) => {
+  if (val) load()
+})
+
 watch(
   () => route.params.courseId,
-  () => courseId.value && load()
+  (val) => {
+    const id = Number(val)
+    if (id && id !== selectedCourseId.value) {
+      selectedCourseId.value = id
+    }
+  }
 )
 
-onMounted(() => {
-  if (courseId.value) {
-    load()
-  } else {
-    // 直接从侧边栏进入（无 courseId）：跳回课程列表并提示选择
-    ElMessage.warning('请先选择要管理的课程')
-    router.push('/teacher/courses')
+onMounted(async () => {
+  try {
+    myCourses.value = await listMyCourses()
+  } catch {
+    // 已由拦截器提示
+  }
+  const fromRoute = Number(route.params.courseId)
+  if (fromRoute) {
+    // 从"我的课程"带 courseId 进入：同步到选择器并触发加载
+    selectedCourseId.value = fromRoute
   }
 })
 </script>
@@ -233,7 +257,14 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  margin-top: 16px;
   margin-bottom: 16px;
+}
+.left {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 .audit-info {
   margin-top: 12px;

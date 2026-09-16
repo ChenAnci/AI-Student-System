@@ -176,3 +176,25 @@ export interface TeacherStats {
   courseScores: CourseScoreStat[]
   scoreBands: NameValue[]
 }
+
+/** 站内通知 */
+export type NotificationType = 'MANUAL' | 'GRADE_PUBLISH' | 'COURSE_CHANGE' | 'ENROLL'
+
+export interface NotificationItem {
+  id: number
+  receiverId?: number
+  type: NotificationType
+  title: string
+  content: string
+  senderName?: string
+  read?: boolean
+  createdAt: string
+}
+
+export interface PageResult<T> {
+  records: T[]
+  total: number
+  size: number
+  current: number
+  pages: number
+}

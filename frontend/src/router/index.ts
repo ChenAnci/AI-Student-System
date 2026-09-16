@@ -48,7 +48,9 @@ const routes: RouteRecordRaw[] = [
       { path: 'admin/courses', name: 'AdminCourses', component: () => import('@/views/admin/CourseManage.vue'), meta: { roles: ['ADMIN'], title: '课程管理' } },
       { path: 'admin/grade-audit', name: 'GradeAudit', component: () => import('@/views/admin/GradeAudit.vue'), meta: { roles: ['ADMIN'], title: '成绩审核' } },
       { path: 'admin/enroll-monitor', name: 'EnrollMonitor', component: () => import('@/views/admin/EnrollMonitor.vue'), meta: { roles: ['ADMIN'], title: '选课监控' } },
-      { path: 'admin/ai-assistant', name: 'AdminAiAssistant', component: () => import('@/views/student/AiAssistant.vue'), meta: { roles: ['ADMIN'], title: 'AI 智能助手' } }
+      { path: 'admin/ai-assistant', name: 'AdminAiAssistant', component: () => import('@/views/student/AiAssistant.vue'), meta: { roles: ['ADMIN'], title: 'AI 智能助手' } },
+      // 站内通知（三角色）
+      { path: 'notifications', name: 'Notifications', component: () => import('@/views/NotificationsView.vue'), meta: { roles: ['STUDENT', 'TEACHER', 'ADMIN'], title: '通知中心' } }
     ]
   },
   { path: '/:pathMatch(.*)*', redirect: '/' }
