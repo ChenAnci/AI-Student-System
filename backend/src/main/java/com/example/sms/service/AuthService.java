@@ -2,6 +2,7 @@ package com.example.sms.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.sms.common.BusinessException;
+import com.example.sms.config.RedisConfig;
 import com.example.sms.dto.LoginDTO;
 import com.example.sms.dto.LoginResponse;
 import com.example.sms.entity.Staff;
@@ -16,6 +17,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
@@ -111,23 +113,24 @@ public class AuthService {
     private void recordLoginFailure(String username) {
         try {
             String key = LOGIN_FAIL_KEY + username;
-            Long count = redis.opsForValue().increment(key);
-            // 首次失败时设置过期时间（INCR 原子自增，仅首次返回 1）
-            if (count != null && count == 1) {
-                redis.expire(key, LOCK_SECONDS, TimeUnit.SECONDS);
+            String current = redis.opsForValue().get(key);
+            if (current != null && Integer.parseInt(current) >= MAX_FAIL_ATTEMPTS) {
+                // 已锁定：不再递增（避免锁定期间失败计数无限膨胀，R-1 缓解）
+                return;
             }
+            // INCR + 首次 EXPIRE 原子脚本（避免进程崩溃导致 key 无 TTL 永久残留）
+            redis.execute(RedisConfig.INCR_EXPIRE_SCRIPT,
+                    Collections.singletonList(key), String.valueOf(LOCK_SECONDS));
         } catch (DataAccessException e) {
             log.warn("Redis 不可用，登录失败计数降级忽略：{}", e.getMessage());
         }
     }
 
-    /** Redis 固定窗口限流：INCR + 首次 EXPIRE，超过 limit 返回 false；Redis 不可用时降级放行 */
+    /** Redis 固定窗口限流：INCR+EXPIRE 原子脚本，超过 limit 返回 false；Redis 不可用时降级放行 */
     private boolean allowRate(String key, int limit) {
         try {
-            Long count = redis.opsForValue().increment(key);
-            if (count != null && count == 1) {
-                redis.expire(key, LOGIN_RATE_SECONDS, TimeUnit.SECONDS);
-            }
+            Long count = redis.execute(RedisConfig.INCR_EXPIRE_SCRIPT,
+                    Collections.singletonList(key), String.valueOf(LOGIN_RATE_SECONDS));
             return count == null || count <= limit;
         } catch (DataAccessException e) {
             log.warn("Redis 不可用，限流降级放行：{}", e.getMessage());

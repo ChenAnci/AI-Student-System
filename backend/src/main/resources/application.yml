@@ -58,6 +58,8 @@ oauth:
     client-id: ${GITHUB_CLIENT_ID:}
     client-secret: ${GITHUB_CLIENT_SECRET:}
     redirect-uri: ${GITHUB_REDIRECT_URI:http://localhost:8080/api/oauth/github/callback}
+    # 前端回调页基址（开发走 vite 5173，生产用环境变量替换为部署域名）
+    front-base: ${FRONT_BASE:http://localhost:5173}
 
 # AI 智能分析服务地址（默认 http://localhost:8000，可用环境变量 AI_BASE_URL 覆盖）
 ai:

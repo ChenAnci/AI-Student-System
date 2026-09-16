@@ -10,7 +10,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.util.concurrent.TimeUnit;
+import java.util.Collections;
 
 /**
  * 登录接口 IP 维度限流（Redis 固定窗口计数）：
@@ -45,10 +45,9 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         }
         String ip = clientIp(request);
         try {
-            Long count = redis.opsForValue().increment(KEY + ip);
-            if (count != null && count == 1) {
-                redis.expire(KEY + ip, WINDOW_SECONDS, TimeUnit.SECONDS);
-            }
+            // INCR + 首次 EXPIRE 原子脚本（避免进程崩溃导致 key 无 TTL 永久残留）
+            Long count = redis.execute(RedisConfig.INCR_EXPIRE_SCRIPT,
+                    Collections.singletonList(KEY + ip), String.valueOf(WINDOW_SECONDS));
             if (count != null && count > LIMIT) {
                 response.setStatus(429);
                 response.setContentType("application/json;charset=UTF-8");
