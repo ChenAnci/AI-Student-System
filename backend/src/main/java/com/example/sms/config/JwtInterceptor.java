@@ -50,6 +50,13 @@ public class JwtInterceptor implements HandlerInterceptor {
             {"/api/stats/admin", "ADMIN"},
             {"/api/stats/teacher", "TEACHER"},
             {"/api/ai/**", "STUDENT,ADMIN"},
+            // 站内通知（精确规则在前，fail-closed）
+            {"/api/notifications/unread-count", "STUDENT"},
+            {"/api/notifications/read-all",     "STUDENT"},
+            {"/api/notifications/sent",         "TEACHER,ADMIN"},
+            {"/api/notifications/*/read",       "STUDENT"},
+            {"/api/notifications/send",         "TEACHER,ADMIN"},
+            {"/api/notifications/**",           "STUDENT"},
     };
 
     @Override
