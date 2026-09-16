@@ -30,17 +30,21 @@ export const useNotificationStore = defineStore('notification', () => {
     const token = getToken()
     if (!token || !userStore.isLogin()) return
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
-    ws = new WebSocket(`${WS_BASE}?token=${encodeURIComponent(token)}`)
+    // 安全：JWT 不在握手 URL query 中传输（避免进入访问日志），连接后通过首条 AUTH 消息认证
+    ws = new WebSocket(WS_BASE)
     ws.onopen = () => {
-      connected.value = true
-      retry = 0
-      heartbeatTimer = setInterval(() => {
-        if (ws?.readyState === WebSocket.OPEN) ws.send('{"type":"PING"}')
-      }, 25000)
+      // 连接建立后立即发送 AUTH，服务端校验通过后回 AUTH_OK 才开始心跳
+      ws?.send(JSON.stringify({ type: 'AUTH', token }))
     }
     ws.onmessage = (ev) => {
       try {
         const msg = JSON.parse(ev.data)
+        if (msg.type === 'AUTH_OK') {
+          connected.value = true
+          retry = 0
+          startHeartbeat()
+          return
+        }
         if (msg.type === 'PONG') return
         if (msg.type === 'NOTIFICATION') {
           unread.value += 1
@@ -50,12 +54,14 @@ export const useNotificationStore = defineStore('notification', () => {
         // 忽略非法帧
       }
     }
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       connected.value = false
       if (heartbeatTimer) {
         clearInterval(heartbeatTimer)
         heartbeatTimer = null
       }
+      // 4401 = 认证失败/超时（token 无效或已过期），停止重连避免循环；其余情况按退避重连
+      if (ev.code === 4401) return
       scheduleReconnect()
     }
     ws.onerror = () => {
@@ -65,6 +71,13 @@ export const useNotificationStore = defineStore('notification', () => {
         // no-op
       }
     }
+  }
+
+  function startHeartbeat() {
+    if (heartbeatTimer) return
+    heartbeatTimer = setInterval(() => {
+      if (ws?.readyState === WebSocket.OPEN) ws.send('{"type":"PING"}')
+    }, 25000)
   }
 
   function scheduleReconnect() {

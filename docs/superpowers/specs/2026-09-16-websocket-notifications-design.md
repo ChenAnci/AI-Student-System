@@ -172,9 +172,10 @@ target: {
 
 ## 7. WebSocket 协议
 
-- 握手：`GET /ws/notifications?token=<jwt>`（浏览器原生 WebSocket，无 SockJS）
+- 握手：`GET /ws/notifications`（浏览器原生 WebSocket，无 SockJS）。**JWT 不放入 URL query**（避免进入访问日志/代理日志，S-2 修复），改为连接后首条消息认证
+- 认证（客户端 → 服务端，连接后首条消息）：`{"type":"AUTH","token":"<jwt>"}`；服务端校验 JWT 签名 + STUDENT 角色，通过后注册会话并回复 `{"type":"AUTH_OK"}`；失败或 10s 未认证以 close code 4401 关闭
 - 服务端 → 客户端：`{"type":"NOTIFICATION","data":{"receiverId":..,"notificationId":..,"title":..,"content":..,"type":..,"createdAt":".."}}`
-- 客户端 → 服务端：`{"type":"PING"}`；服务端回 `{"type":"PONG"}`（心跳保活，防止 Tomcat 空闲超时）
+- 客户端 → 服务端：`{"type":"PING"}`；服务端回 `{"type":"PONG"}`（认证后心跳保活，防止 Tomcat 空闲超时）
 
 ## 8. 前端组件
 
