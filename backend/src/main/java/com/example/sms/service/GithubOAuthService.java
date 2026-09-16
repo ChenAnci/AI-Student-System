@@ -6,6 +6,7 @@ import com.example.sms.dto.LoginResponse;
 import com.example.sms.dto.OAuthCallbackVO;
 import com.example.sms.entity.OAuthBinding;
 import com.example.sms.mapper.OAuthBindingMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +40,10 @@ public class GithubOAuthService {
     /** OAuth state 有效期（与 Redis key TTL 一致，10 分钟） */
     private static final long STATE_TTL_SECONDS = 10 * 60L;
     private static final String STATE_KEY = "sms:oauth:state:";
+
+    /** 登录态授权码 key / 有效期（回调页凭此换取登录态，120 秒一次性，避免 JWT 暴露在 URL） */
+    private static final long AUTH_CODE_TTL_SECONDS = 120;
+    private static final String AUTH_CODE_KEY = "sms:oauth:code:";
 
     @Value("${oauth.github.client-id:}")
     private String clientId;
@@ -89,11 +94,8 @@ public class GithubOAuthService {
         if (binding != null) {
             LoginResponse resp = authService.issueByUserNo(binding.getUserNo());
             vo.setStatus("LOGIN_SUCCESS");
-            vo.setToken(resp.getToken());
-            vo.setUserId(resp.getUserId());
-            vo.setUserNo(resp.getUserNo());
-            vo.setRealName(resp.getRealName());
-            vo.setRoleType(resp.getRoleType());
+            // 回调 URL 不携带 JWT，改为一次性授权码（Redis 短 TTL 缓存登录态）
+            vo.setAuthCode(issueAuthCode(resp));
         } else {
             vo.setStatus("NEED_BIND");
             vo.setProviderUid(uid);
@@ -120,6 +122,35 @@ public class GithubOAuthService {
     }
 
     // ===== 内部工具 =====
+
+    /** 生成一次性授权码并缓存登录态（Redis 短 TTL），回调 URL 不携带 JWT（Q-5） */
+    private String issueAuthCode(LoginResponse resp) {
+        String code = genState();
+        try {
+            redis.opsForValue().set(AUTH_CODE_KEY + code, mapper.writeValueAsString(resp),
+                    AUTH_CODE_TTL_SECONDS, TimeUnit.SECONDS);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException("登录态生成失败，请重新登录");
+        }
+        return code;
+    }
+
+    /** 用一次性授权码换取登录态（校验存在 + 原子删除，仅能使用一次） */
+    public LoginResponse exchangeAuthCode(String authCode) {
+        if (authCode == null || authCode.isBlank()) {
+            throw new BusinessException("授权码缺失，请重新登录");
+        }
+        String json = redis.opsForValue().get(AUTH_CODE_KEY + authCode);
+        if (json == null) {
+            throw new BusinessException("授权码无效或已过期，请重新登录");
+        }
+        redis.delete(AUTH_CODE_KEY + authCode);
+        try {
+            return mapper.readValue(json, LoginResponse.class);
+        } catch (Exception e) {
+            throw new BusinessException("登录态解析失败，请重新登录");
+        }
+    }
 
     private OAuthBinding findBinding(String provider, String uid) {
         return bindingMapper.selectOne(new LambdaQueryWrapper<OAuthBinding>()
