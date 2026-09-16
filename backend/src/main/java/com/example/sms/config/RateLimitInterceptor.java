@@ -1,7 +1,9 @@
 package com.example.sms.config;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -18,7 +20,10 @@ import java.util.concurrent.TimeUnit;
  * 安全说明：默认使用连接对端 IP（remoteAddr），**不信任** X-Forwarded-For，
  * 防止攻击者伪造 XFF 头绕过 IP 限流；仅当部署在可信反向代理之后时，通过
  * TRUST_XFF=true 显式启用（由代理写入真实客户端 IP）。
+ * <p>
+ * 可用性：Redis 不可用时限流降级放行（记录告警），避免登录接口整体不可用。
  */
+@Slf4j
 @Component
 public class RateLimitInterceptor implements HandlerInterceptor {
 
@@ -39,15 +44,20 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             return true;
         }
         String ip = clientIp(request);
-        Long count = redis.opsForValue().increment(KEY + ip);
-        if (count != null && count == 1) {
-            redis.expire(KEY + ip, WINDOW_SECONDS, TimeUnit.SECONDS);
-        }
-        if (count != null && count > LIMIT) {
-            response.setStatus(429);
-            response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"code\":429,\"message\":\"请求过于频繁，请稍后再试\",\"data\":null}");
-            return false;
+        try {
+            Long count = redis.opsForValue().increment(KEY + ip);
+            if (count != null && count == 1) {
+                redis.expire(KEY + ip, WINDOW_SECONDS, TimeUnit.SECONDS);
+            }
+            if (count != null && count > LIMIT) {
+                response.setStatus(429);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"code\":429,\"message\":\"请求过于频繁，请稍后再试\",\"data\":null}");
+                return false;
+            }
+        } catch (DataAccessException e) {
+            // Redis 不可用时降级放行（可用性优先，防护暂时失效），记录告警
+            log.warn("Redis 不可用，登录 IP 限流降级放行：{}", e.getMessage());
         }
         return true;
     }

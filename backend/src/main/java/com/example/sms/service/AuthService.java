@@ -9,9 +9,11 @@ import com.example.sms.entity.Student;
 import com.example.sms.mapper.StaffMapper;
 import com.example.sms.mapper.StudentMapper;
 import com.example.sms.util.JwtUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.Locale;
@@ -20,6 +22,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * 登录认证服务
  */
+@Slf4j
 @Service
 public class AuthService {
 
@@ -67,7 +70,11 @@ public class AuthService {
         }
         try {
             LoginResponse resp = doLogin(username, password);
-            redis.delete(LOGIN_FAIL_KEY + lockKey);
+            try {
+                redis.delete(LOGIN_FAIL_KEY + lockKey);
+            } catch (DataAccessException e) {
+                log.warn("Redis 不可用，登录成功清除失败计数失败：{}", e.getMessage());
+            }
             return resp;
         } catch (BusinessException e) {
             recordLoginFailure(lockKey);
@@ -88,30 +95,44 @@ public class AuthService {
     private static final long LOCK_SECONDS = 5 * 60L;
 
     private void checkLoginLocked(String username) {
-        String count = redis.opsForValue().get(LOGIN_FAIL_KEY + username);
-        if (count != null && Integer.parseInt(count) >= MAX_FAIL_ATTEMPTS) {
-            Long ttl = redis.getExpire(LOGIN_FAIL_KEY + username, TimeUnit.SECONDS);
-            long remainMin = (ttl == null || ttl <= 0) ? 1 : (ttl / 60) + 1;
-            throw new BusinessException("登录失败次数过多，请 " + remainMin + " 分钟后重试");
+        try {
+            String count = redis.opsForValue().get(LOGIN_FAIL_KEY + username);
+            if (count != null && Integer.parseInt(count) >= MAX_FAIL_ATTEMPTS) {
+                Long ttl = redis.getExpire(LOGIN_FAIL_KEY + username, TimeUnit.SECONDS);
+                long remainMin = (ttl == null || ttl <= 0) ? 1 : (ttl / 60) + 1;
+                throw new BusinessException("登录失败次数过多，请 " + remainMin + " 分钟后重试");
+            }
+        } catch (DataAccessException e) {
+            // Redis 不可用时降级放行（可用性优先，防护暂时失效），记录告警
+            log.warn("Redis 不可用，登录锁定检查降级放行：{}", e.getMessage());
         }
     }
 
     private void recordLoginFailure(String username) {
-        String key = LOGIN_FAIL_KEY + username;
-        Long count = redis.opsForValue().increment(key);
-        // 首次失败时设置过期时间（INCR 原子自增，仅首次返回 1）
-        if (count != null && count == 1) {
-            redis.expire(key, LOCK_SECONDS, TimeUnit.SECONDS);
+        try {
+            String key = LOGIN_FAIL_KEY + username;
+            Long count = redis.opsForValue().increment(key);
+            // 首次失败时设置过期时间（INCR 原子自增，仅首次返回 1）
+            if (count != null && count == 1) {
+                redis.expire(key, LOCK_SECONDS, TimeUnit.SECONDS);
+            }
+        } catch (DataAccessException e) {
+            log.warn("Redis 不可用，登录失败计数降级忽略：{}", e.getMessage());
         }
     }
 
-    /** Redis 固定窗口限流：INCR + 首次 EXPIRE，超过 limit 返回 false */
+    /** Redis 固定窗口限流：INCR + 首次 EXPIRE，超过 limit 返回 false；Redis 不可用时降级放行 */
     private boolean allowRate(String key, int limit) {
-        Long count = redis.opsForValue().increment(key);
-        if (count != null && count == 1) {
-            redis.expire(key, LOGIN_RATE_SECONDS, TimeUnit.SECONDS);
+        try {
+            Long count = redis.opsForValue().increment(key);
+            if (count != null && count == 1) {
+                redis.expire(key, LOGIN_RATE_SECONDS, TimeUnit.SECONDS);
+            }
+            return count == null || count <= limit;
+        } catch (DataAccessException e) {
+            log.warn("Redis 不可用，限流降级放行：{}", e.getMessage());
+            return true;
         }
-        return count == null || count <= limit;
     }
 
     private LoginResponse loginStaff(String staffNo, String password) {
