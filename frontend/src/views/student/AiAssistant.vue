@@ -147,12 +147,18 @@ onMounted(async () => {
 <style scoped>
 .ai-page {
   max-width: 860px;
-  margin: 0 auto;
+  margin: 24px auto 0;
 }
 .chat-card {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 200px);
+}
+.chat-card :deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .chat-header {
   display: flex;
