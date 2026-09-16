@@ -44,7 +44,7 @@
         </el-table-column>
         <el-table-column label="操作" width="200" align="center">
           <template #default="{ row }">
-            <el-button link type="primary" :disabled="row.status === 'PUBLISHED'" @click="openEdit(row)">
+            <el-button link type="primary" @click="openEdit(row)">
               编辑
             </el-button>
             <el-button link type="success" :disabled="row.status === 'PUBLISHED'" @click="handlePublish(row)">
@@ -60,27 +60,27 @@
     </el-card>
 
     <!-- 新增 / 编辑课程弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑课程' : '新增课程'" width="560px" @closed="resetForm">
+    <el-dialog v-model="dialogVisible" :title="form.id ? (isPublishedEdit ? '调课' : '编辑课程') : '新增课程'" width="560px" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-form-item label="课程编号" prop="courseCode">
-          <el-input v-model="form.courseCode" placeholder="如 CS101" />
+          <el-input v-model="form.courseCode" :disabled="isPublishedEdit" placeholder="如 CS101" />
         </el-form-item>
         <el-form-item label="课程名称" prop="courseName">
-          <el-input v-model="form.courseName" placeholder="如 Java 程序设计" />
+          <el-input v-model="form.courseName" :disabled="isPublishedEdit" placeholder="如 Java 程序设计" />
         </el-form-item>
         <el-form-item label="授课教师" prop="teacherId">
-          <el-select v-model="form.teacherId" filterable placeholder="请选择授课教师" style="width: 100%">
+          <el-select v-model="form.teacherId" :disabled="isPublishedEdit" filterable placeholder="请选择授课教师" style="width: 100%">
             <el-option v-for="t in teacherOptions" :key="t.id" :label="t.realName" :value="t.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="学分" prop="credit">
-          <el-input-number v-model="form.credit" :min="0.5" :max="20" :step="0.5" :precision="1" />
+          <el-input-number v-model="form.credit" :disabled="isPublishedEdit" :min="0.5" :max="20" :step="0.5" :precision="1" />
         </el-form-item>
         <el-form-item label="学时" prop="hours">
-          <el-input-number v-model="form.hours" :min="1" :max="200" />
+          <el-input-number v-model="form.hours" :disabled="isPublishedEdit" :min="1" :max="200" />
         </el-form-item>
         <el-form-item label="容量" prop="capacity">
-          <el-input-number v-model="form.capacity" :min="1" :max="1000" />
+          <el-input-number v-model="form.capacity" :disabled="isPublishedEdit" :min="1" :max="1000" />
         </el-form-item>
         <el-form-item label="上课时间" prop="schedule">
           <SchedulePicker v-model="form.schedule" />
@@ -98,7 +98,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { createCourse, deleteCourse, listAllCourses, publishCourse, updateCourse, type CourseForm } from '@/api/course'
 import { listStaffs } from '@/api/account'
@@ -112,6 +112,8 @@ const courses = ref<MyCourseVO[]>([])
 const teacherMap = ref<Record<number, string>>({})
 const teacherOptions = ref<Staff[]>([])
 const dialogVisible = ref(false)
+const editingStatus = ref<string>('')
+const isPublishedEdit = computed(() => editingStatus.value === 'PUBLISHED')
 const formRef = ref<FormInstance>()
 
 const emptyForm = (): CourseForm & { id?: number } => ({
@@ -158,6 +160,7 @@ function auditTagType(status?: string) {
 
 function openCreate() {
   Object.assign(form, emptyForm())
+  editingStatus.value = ''
   dialogVisible.value = true
 }
 
@@ -173,6 +176,7 @@ function openEdit(row: MyCourseVO) {
     schedule: row.schedule,
     location: row.location
   })
+  editingStatus.value = row.status
   dialogVisible.value = true
 }
 
