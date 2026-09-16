@@ -40,6 +40,11 @@ public class AuthService {
     /** Redis Key 前缀：登录失败计数（锁定键统一小写，配合 MySQL 大小写不敏感排序规则） */
     private static final String LOGIN_FAIL_KEY = "sms:login:fail:";
 
+    /** Redis Key 前缀：登录尝试频率（单账号每分钟上限，Redis 固定窗口） */
+    private static final String LOGIN_RATE_KEY = "sms:rate:login:user:";
+    private static final int LOGIN_RATE_LIMIT = 10;
+    private static final long LOGIN_RATE_SECONDS = 60;
+
     /**
      * 登录：学号（S 开头）查学生表，工号查教职工表；带失败锁定保护。
      * 锁定键统一小写规范化，防止利用 MySQL 大小写不敏感排序规则以大小写变体绕过锁定。
@@ -48,6 +53,10 @@ public class AuthService {
         String username = dto.getUsername().trim();
         String lockKey = username.toLowerCase(Locale.ROOT);
         checkLoginLocked(lockKey);
+        // 账号维度限流：单账号每分钟最多 LOGIN_RATE_LIMIT 次登录尝试（Redis 固定窗口）
+        if (!allowRate(LOGIN_RATE_KEY + lockKey, LOGIN_RATE_LIMIT)) {
+            throw new BusinessException("登录尝试过于频繁，请稍后再试");
+        }
         try {
             LoginResponse resp = doLogin(username, dto.getPassword());
             redis.delete(LOGIN_FAIL_KEY + lockKey);
@@ -86,6 +95,15 @@ public class AuthService {
         if (count != null && count == 1) {
             redis.expire(key, LOCK_SECONDS, TimeUnit.SECONDS);
         }
+    }
+
+    /** Redis 固定窗口限流：INCR + 首次 EXPIRE，超过 limit 返回 false */
+    private boolean allowRate(String key, int limit) {
+        Long count = redis.opsForValue().increment(key);
+        if (count != null && count == 1) {
+            redis.expire(key, LOGIN_RATE_SECONDS, TimeUnit.SECONDS);
+        }
+        return count == null || count <= limit;
     }
 
     private LoginResponse loginStaff(String staffNo, String password) {

@@ -16,6 +16,9 @@ public class WebConfig implements WebMvcConfigurer {
     @Autowired
     private JwtInterceptor jwtInterceptor;
 
+    @Autowired
+    private RateLimitInterceptor rateLimitInterceptor;
+
     /** 与 application.yml 的 knife4j.enable 保持一致：文档路径仅在开发调试时放行 */
     @Value("${knife4j.enable:false}")
     private boolean knife4jEnabled;
@@ -40,5 +43,8 @@ public class WebConfig implements WebMvcConfigurer {
                     "/v3/api-docs"
             );
         }
+        // 登录接口 IP 维度限流（Redis，多实例共享计数）
+        registry.addInterceptor(rateLimitInterceptor)
+                .addPathPatterns("/api/auth/login");
     }
 }
