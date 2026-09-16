@@ -14,6 +14,7 @@ import com.example.sms.vo.CourseCardVO;
 import com.example.sms.vo.MyCourseVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -151,7 +152,14 @@ public class CourseService {
         }).collect(Collectors.toList());
     }
 
-    /** 学生选课中心：已发布课程列表（关键词/学分范围筛选，含是否已选） */
+    /**
+     * 选课中心课程列表（Redis 缓存 30s，缓解高并发下重复查询 MySQL）。
+     * key 含 studentId（结果含个人已选状态 enrolled）与筛选参数；选课人数容量最多滞后 30s。
+     */
+    @Cacheable(value = "courseCenter",
+            key = "#studentId + ':' + (#keyword != null ? #keyword : '') + ':'"
+                    + " + (#minCredit != null ? #minCredit : '0') + ':'"
+                    + " + (#maxCredit != null ? #maxCredit : '0')")
     public List<CourseCardVO> listPublishedForStudent(Long studentId, List<Long> enrolledCourseIds,
                                                       String keyword, BigDecimal minCredit, BigDecimal maxCredit) {
         List<Course> courses = courseMapper.selectCenterPublished(keyword, minCredit, maxCredit);
