@@ -50,6 +50,9 @@ public class NotificationWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
+        // 会话空闲超时（S-3）由 WebSocketConfig 的 ServletServerContainerFactoryBean 统一配置（60s）：
+        // 客户端异常断网/心跳中断时由容器及时关闭并触发清理，避免会话残留
+        // （前端 25s 心跳保持连接活跃，正常连接不会触发该超时）
         // 不立即注册：等待首条 AUTH 消息认证。未认证连接定时关闭，防止占用会话资源。
         AUTH_TIMEOUT.schedule(() -> {
             try {
