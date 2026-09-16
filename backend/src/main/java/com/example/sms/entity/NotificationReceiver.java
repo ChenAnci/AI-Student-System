@@ -1,7 +1,6 @@
 package com.example.sms.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -22,9 +21,8 @@ public class NotificationReceiver {
 
     private Long studentId;
 
-    /** 0未读 1已读 */
-    @TableField("is_read")
-    private Boolean read;
+    /** 0未读 1已读（字段名避免 MySQL 保留字 read） */
+    private Boolean isRead;
 
     private LocalDateTime readAt;
 

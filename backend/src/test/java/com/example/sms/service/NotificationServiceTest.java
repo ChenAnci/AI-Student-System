@@ -91,7 +91,7 @@ class NotificationServiceTest {
         r.setId(5L);
         r.setStudentId(999L);
         r.setNotificationId(1L);
-        r.setRead(false);
+        r.setIsRead(false);
         when(receiverMapper.selectById(5L)).thenReturn(r);
 
         assertThrows(BusinessException.class, () -> notificationService.markRead(5L));

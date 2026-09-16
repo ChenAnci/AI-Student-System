@@ -98,7 +98,7 @@ public class NotificationService {
             NotificationReceiver r = new NotificationReceiver();
             r.setNotificationId(n.getId());
             r.setStudentId(sid);
-            r.setRead(false);
+            r.setIsRead(false);
             receiverMapper.insert(r);
         }
 
@@ -197,7 +197,7 @@ public class NotificationService {
     public long unreadCount() {
         return receiverMapper.selectCount(new LambdaQueryWrapper<NotificationReceiver>()
                 .eq(NotificationReceiver::getStudentId, UserContext.getUserId())
-                .eq(NotificationReceiver::getRead, false));
+                .eq(NotificationReceiver::getIsRead, false));
     }
 
     public void markRead(Long receiverId) {
@@ -206,8 +206,8 @@ public class NotificationService {
         if (r == null || !Objects.equals(r.getStudentId(), userId)) {
             throw new BusinessException(403, "无权操作该通知");
         }
-        if (!Boolean.TRUE.equals(r.getRead())) {
-            r.setRead(true);
+        if (!Boolean.TRUE.equals(r.getIsRead())) {
+            r.setIsRead(true);
             r.setReadAt(LocalDateTime.now());
             receiverMapper.updateById(r);
         }
@@ -216,8 +216,8 @@ public class NotificationService {
     public void readAll() {
         receiverMapper.update(null, new LambdaUpdateWrapper<NotificationReceiver>()
                 .eq(NotificationReceiver::getStudentId, UserContext.getUserId())
-                .eq(NotificationReceiver::getRead, false)
-                .set(NotificationReceiver::getRead, true)
+                .eq(NotificationReceiver::getIsRead, false)
+                .set(NotificationReceiver::getIsRead, true)
                 .set(NotificationReceiver::getReadAt, LocalDateTime.now()));
     }
 
@@ -263,7 +263,7 @@ public class NotificationService {
             v.setTitle(n.getTitle());
             v.setContent(n.getContent());
             v.setSenderName(n.getSenderName());
-            v.setRead(r.getRead());
+            v.setRead(r.getIsRead());
             v.setCreatedAt(n.getCreatedAt());
             return v;
         }).filter(Objects::nonNull).collect(Collectors.toList()));
