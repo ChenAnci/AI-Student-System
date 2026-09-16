@@ -53,6 +53,9 @@ public class EnrollService {
     @Autowired
     private CourseService courseService;
 
+    @Autowired
+    private NotificationService notificationService;
+
     /** 学生选课 */
     @Transactional
     public void enroll(Long studentId, Long courseId) {
@@ -87,6 +90,11 @@ public class EnrollService {
 
         course.setCurrentEnrolled(course.getCurrentEnrolled() + 1);
         courseMapper.updateById(course);
+
+        // 选课成功自动通知
+        notificationService.sendSystem("ENROLL", "选课成功",
+                "「" + course.getCourseName() + "」选课成功，可在“我的课表”中查看。",
+                List.of(studentId));
     }
 
     /** 学生退课 */
@@ -232,6 +240,11 @@ public class EnrollService {
             throw new BusinessException(403, "无权限，仅教学秘书可操作");
         }
         enroll(studentId, courseId);
+        // 代选成功自动通知
+        Course course = courseMapper.selectById(courseId);
+        notificationService.sendSystem("ENROLL", "选课成功",
+                "「" + course.getCourseName() + "」选课成功（教学秘书代选），可在“我的课表”中查看。",
+                List.of(studentId));
     }
 
     /** 学生已选课程 ID 列表（用于选课中心标记） */

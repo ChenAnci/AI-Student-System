@@ -60,6 +60,9 @@ public class GradeService {
     @Autowired
     private CourseGradeAuditMapper auditMapper;
 
+    @Autowired
+    private NotificationService notificationService;
+
     /** 教师：查看课程选课名单（含成绩） */
     public List<Map<String, Object>> listCourseStudents(Long courseId) {
         Course course = checkTeacherCourse(courseId);
@@ -358,6 +361,12 @@ public class GradeService {
         for (StudentCourse sc : scs) {
             recalcStudentCredits(sc.getStudentId());
         }
+
+        // 成绩发布自动通知（接收人=该课程选课学生）
+        notificationService.sendSystem("GRADE_PUBLISH",
+                "成绩已发布",
+                "「" + course.getCourseName() + "」成绩已发布，可登录系统查询。",
+                scs.stream().map(StudentCourse::getStudentId).collect(Collectors.toList()));
     }
 
     /** 重算某学生已修学分与 GPA（只统计已发布课程） */

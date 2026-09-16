@@ -6,9 +6,11 @@ import com.example.sms.dto.CourseFormDTO;
 import com.example.sms.entity.Course;
 import com.example.sms.entity.CourseGradeAudit;
 import com.example.sms.entity.Staff;
+import com.example.sms.entity.StudentCourse;
 import com.example.sms.mapper.CourseGradeAuditMapper;
 import com.example.sms.mapper.CourseMapper;
 import com.example.sms.mapper.StaffMapper;
+import com.example.sms.mapper.StudentCourseMapper;
 import com.example.sms.util.UserContext;
 import com.example.sms.vo.CourseCardVO;
 import com.example.sms.vo.MyCourseVO;
@@ -22,6 +24,7 @@ import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -39,6 +42,12 @@ public class CourseService {
 
     @Autowired
     private CourseGradeAuditMapper auditMapper;
+
+    @Autowired
+    private StudentCourseMapper studentCourseMapper;
+
+    @Autowired
+    private NotificationService notificationService;
 
     private boolean isAdmin() {
         return "ADMIN".equals(UserContext.getRole());
@@ -63,9 +72,32 @@ public class CourseService {
         return course;
     }
 
-    /** 编辑课程（仅 UNPUBLISHED 状态；教师只能改自己的，教秘可改全部） */
+    /** 编辑课程：未发布可全量编辑；已发布仅允许调课（修改上课时间/地点），其余字段强制保留，变化时通知选课学生 */
     public void updateCourse(Long id, CourseFormDTO dto) {
         Course course = getEditableCourse(id);
+        if ("PUBLISHED".equals(course.getStatus())) {
+            String oldSchedule = course.getSchedule();
+            String oldLocation = course.getLocation();
+            course.setSchedule(dto.getSchedule());
+            course.setLocation(dto.getLocation());
+            courseMapper.updateById(course);
+            boolean changed = !Objects.equals(oldSchedule, dto.getSchedule())
+                    || !Objects.equals(oldLocation, dto.getLocation());
+            if (changed) {
+                List<Long> studentIds = studentCourseMapper.selectList(
+                                new LambdaQueryWrapper<StudentCourse>()
+                                        .eq(StudentCourse::getCourseId, id))
+                        .stream().map(StudentCourse::getStudentId).collect(Collectors.toList());
+                if (!studentIds.isEmpty()) {
+                    notificationService.sendSystem("COURSE_CHANGE", "调课通知",
+                            "「" + course.getCourseName() + "」课程信息已调整：上课时间 "
+                                    + (dto.getSchedule() == null ? "未指定" : dto.getSchedule())
+                                    + "，上课地点 " + (dto.getLocation() == null ? "未指定" : dto.getLocation()),
+                            studentIds);
+                }
+            }
+            return;
+        }
         course.setCourseCode(dto.getCourseCode());
         course.setCourseName(dto.getCourseName());
         course.setCredit(dto.getCredit());
@@ -89,28 +121,35 @@ public class CourseService {
         return teacher;
     }
 
-    /** 发布课程（锁定，永久不可编辑） */
+    /** 发布课程（锁定） */
     public void publishCourse(Long id) {
         Course course = getEditableCourse(id);
+        if ("PUBLISHED".equals(course.getStatus())) {
+            throw new BusinessException("课程已发布");
+        }
         course.setStatus("PUBLISHED");
         courseMapper.updateById(course);
     }
 
-    /** 删除课程（仅 UNPUBLISHED） */
+    /** 删除课程（仅未发布；有选课记录也不可删除） */
     @Transactional
     public void deleteCourse(Long id) {
         Course course = getEditableCourse(id);
-        // 有选课记录的课程不允许删除
+        if ("PUBLISHED".equals(course.getStatus())) {
+            throw new BusinessException("已发布课程不可删除");
+        }
+        Long enrolled = studentCourseMapper.selectCount(new LambdaQueryWrapper<StudentCourse>()
+                .eq(StudentCourse::getCourseId, id));
+        if (enrolled > 0) {
+            throw new BusinessException("该课程已有学生选课，不可删除");
+        }
         courseMapper.deleteById(course.getId());
     }
 
-    /** 获取可编辑课程（UNPUBLISHED + 权限校验） */
+    /** 获取可编辑课程（权限校验：教师只能操作自己的课程） */
     private Course getEditableCourse(Long id) {
         Course course = courseMapper.selectById(id);
         if (course == null) throw new BusinessException("课程不存在");
-        if ("PUBLISHED".equals(course.getStatus())) {
-            throw new BusinessException("课程已发布，信息永久锁定，不可修改");
-        }
         if (!isAdmin() && !course.getTeacherId().equals(UserContext.getUserId())) {
             throw new BusinessException(403, "无权限操作他人课程");
         }
