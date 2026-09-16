@@ -25,6 +25,7 @@
       <el-header class="header">
         <div class="page-title">{{ $route.meta.title }}</div>
         <div class="user-area">
+          <NotificationBell />
           <el-tag size="small" :type="roleTagType" effect="dark">{{ roleLabel }}</el-tag>
           <span class="username">{{ userStore.displayName() }}</span>
           <el-button type="danger" link @click="handleLogout">退出登录</el-button>
@@ -38,10 +39,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import NotificationBell from '@/components/NotificationBell.vue'
+import { useNotificationStore } from '@/stores/notification'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -61,14 +64,16 @@ const menus = computed<MenuItem[]>(() => {
       { path: '/admin/courses', title: '课程管理', icon: 'Reading' },
       { path: '/admin/grade-audit', title: '成绩审核', icon: 'EditPen' },
       { path: '/admin/enroll-monitor', title: '选课监控', icon: 'DataAnalysis' },
-      { path: '/admin/ai-assistant', title: 'AI 智能助手', icon: 'ChatDotRound' }
+      { path: '/admin/ai-assistant', title: 'AI 智能助手', icon: 'ChatDotRound' },
+      { path: '/notifications', title: '通知中心', icon: 'Bell' }
     ]
   }
   if (role === 'TEACHER') {
     return [
       { path: '/teacher/courses', title: '我的课程', icon: 'Reading' },
       { path: '/teacher/grade-entry', title: '成绩管理', icon: 'EditPen' },
-      { path: '/teacher/stats', title: '成绩统计', icon: 'TrendCharts' }
+      { path: '/teacher/stats', title: '成绩统计', icon: 'TrendCharts' },
+      { path: '/notifications', title: '通知中心', icon: 'Bell' }
     ]
   }
   return [
@@ -76,7 +81,8 @@ const menus = computed<MenuItem[]>(() => {
     { path: '/student/center', title: '选课中心', icon: 'ShoppingCart' },
     { path: '/student/my-courses', title: '我的课表', icon: 'Calendar' },
     { path: '/student/grades', title: '成绩查询', icon: 'Document' },
-    { path: '/student/ai-assistant', title: 'AI 智能助手', icon: 'ChatDotRound' }
+    { path: '/student/ai-assistant', title: 'AI 智能助手', icon: 'ChatDotRound' },
+    { path: '/notifications', title: '通知中心', icon: 'Bell' }
   ]
 })
 
@@ -92,6 +98,17 @@ const roleTagType = computed(() => {
   if (role === 'ADMIN') return 'danger'
   if (role === 'TEACHER') return 'warning'
   return 'success'
+})
+
+const notificationStore = useNotificationStore()
+
+onMounted(() => {
+  notificationStore.refreshUnread()
+  notificationStore.connect()
+})
+
+onUnmounted(() => {
+  notificationStore.disconnect()
 })
 
 function handleLogout() {
