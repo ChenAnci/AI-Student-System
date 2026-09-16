@@ -40,22 +40,29 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
+        // 只对登录接口生效：登录接口无鉴权、人人可访问，是最主要的暴力破解/资源耗尽攻击面；
+        // 其余接口本身已被 JWT 拦截器鉴权，无需再做 IP 限流。
         if (!"/api/auth/login".equals(request.getRequestURI())) {
             return true;
         }
+        // 取客户端 IP 作为限流维度：默认用连接对端 IP（trustXff=false），不信任 XFF 头（详见 clientIp 注释）
         String ip = clientIp(request);
         try {
             // INCR + 首次 EXPIRE 原子脚本（避免进程崩溃导致 key 无 TTL 永久残留）
             Long count = redis.execute(RedisConfig.INCR_EXPIRE_SCRIPT,
                     Collections.singletonList(KEY + ip), String.valueOf(WINDOW_SECONDS));
             if (count != null && count > LIMIT) {
+                // 固定窗口内次数超限：返回 429（Too Many Requests），
+                // 计数存 Redis 使多实例部署共享同一窗口，避免单机限流失效。
                 response.setStatus(429);
                 response.setContentType("application/json;charset=UTF-8");
                 response.getWriter().write("{\"code\":429,\"message\":\"请求过于频繁，请稍后再试\",\"data\":null}");
                 return false;
             }
         } catch (DataAccessException e) {
-            // Redis 不可用时降级放行（可用性优先，防护暂时失效），记录告警
+            // Redis 不可用时降级放行（可用性优先，防护暂时失效），记录告警。
+            // 注意只捕获 DataAccessException 而非 Exception：确保限流组件自身故障不拖垮登录功能，
+            // 即使防护短暂失效，也优先保证合法用户能正常登录（由日志告警驱动人工介入）。
             log.warn("Redis 不可用，登录 IP 限流降级放行：{}", e.getMessage());
         }
         return true;

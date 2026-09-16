@@ -55,6 +55,7 @@ interface MenuItem {
   icon: string
 }
 
+// 侧栏菜单按角色动态生成：管理员/教师/学生各自只看到本角色的导航项，避免出现越权入口
 const menus = computed<MenuItem[]>(() => {
   const role = userStore.role()
   if (role === 'ADMIN') {
@@ -86,6 +87,7 @@ const menus = computed<MenuItem[]>(() => {
   ]
 })
 
+// 角色中文名（顶栏标签展示）：ADMIN 对外叫"教学秘书"
 const roleLabel = computed(() => {
   const role = userStore.role()
   if (role === 'ADMIN') return '教学秘书'
@@ -93,6 +95,7 @@ const roleLabel = computed(() => {
   return '学生'
 })
 
+// 角色标签颜色：管理员红 / 教师橙 / 学生绿，便于在顶栏一眼区分当前身份
 const roleTagType = computed(() => {
   const role = userStore.role()
   if (role === 'ADMIN') return 'danger'
@@ -104,6 +107,7 @@ const notificationStore = useNotificationStore()
 // 站内通知收件箱/未读/WS 实时推送仅面向学生角色（接口按 STUDENT 鉴权），管理员/教师不挂载铃铛
 const isStudent = computed(() => userStore.role() === 'STUDENT')
 
+// 挂载时（仅学生）先同步一次未读数，再建立 WS 长连接接收实时推送（见 NotificationBell 的 v-if="isStudent"）
 onMounted(() => {
   if (isStudent.value) {
     notificationStore.refreshUnread()
@@ -111,10 +115,12 @@ onMounted(() => {
   }
 })
 
+// 离开主布局（登出/跳转到登录页）时断开 WS，避免连接泄漏
 onUnmounted(() => {
   notificationStore.disconnect()
 })
 
+// 退出登录：二次确认后清空本地登录态（token + 用户信息）并跳回登录页
 function handleLogout() {
   ElMessageBox.confirm('确定退出登录吗？', '提示', { type: 'warning' }).then(() => {
     userStore.logout()

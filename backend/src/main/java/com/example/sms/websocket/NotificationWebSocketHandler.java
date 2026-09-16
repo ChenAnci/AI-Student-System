@@ -78,23 +78,30 @@ public class NotificationWebSocketHandler extends TextWebSocketHandler {
 
         if (session.getAttributes().get("userId") == null) {
             // ---- 未认证：仅接受 AUTH ----
+            // fail-closed：未认证阶段收到任何非 AUTH 帧一律忽略（不响应也不注册），等超时任务关闭连接
             if (!"AUTH".equals(type)) {
                 return;
             }
+            // asText(null)：token 缺失时返回 null，parseToken 会返回 null，走下面的统一拒绝分支，不单独报错
             String token = node.path("token").asText(null);
             Claims claims = (token != null) ? jwtUtil.parseToken(token) : null;
+            // 通知通道仅面向学生端：即使 token 有效，教师/管理员也不接入（他们走轮询刷新），并立即关闭连接
             if (claims == null || !"STUDENT".equals(claims.get("roleType"))) {
                 closeUnauthorized(session);
                 return;
             }
+            // 认证通过：把 userId 写入会话属性并注册进在线表，此后该会话才可收发消息
             Long userId = ((Number) claims.get("userId")).longValue();
             session.getAttributes().put("userId", userId);
             registry.add(userId, session);
+            // 回 AUTH_OK 通知前端"注册成功，可开始心跳"
             sendJson(session, "{\"type\":\"AUTH_OK\"}");
             return;
         }
 
         // ---- 已认证：心跳 ----
+        // 只响应 PING/PONG：应用层心跳用于探活，同时客户端借 PONG 确认通道可用；
+        // 其它类型的帧在已认证状态同样被忽略（fail-closed，不实现其它业务消息）
         if ("PING".equals(type)) {
             sendJson(session, "{\"type\":\"PONG\"}");
         }
@@ -102,14 +109,17 @@ public class NotificationWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+        // 无论正常关闭还是被超时/4401 关闭，都从在线表中摘除该会话，防止向已失效连接重复推送
         Object raw = session.getAttributes().get("userId");
         if (raw instanceof Long) registry.remove((Long) raw, session);
     }
 
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) {
+        // 传输层异常（如客户端异常断网、网络闪断）：主动从在线表清理，避免"半死会话"残留在推送循环里
         Object raw = session.getAttributes().get("userId");
         if (raw instanceof Long) registry.remove((Long) raw, session);
+        // 对未认证会话同样走 4401 关闭语义；已认证会话的关闭由 closeUnauthorized 内 isOpen 判断兜底
         closeUnauthorized(session);
     }
 

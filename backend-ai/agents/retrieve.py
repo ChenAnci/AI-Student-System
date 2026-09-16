@@ -9,6 +9,9 @@ from models.state import AIState
 
 
 def _profile_text(state: AIState) -> str:
+    # 把结构化画像/成绩压缩成一段自然语言文本，作为提问重写的输入信号。
+    # 从成绩单里拆出"已修课程"与"未通过课程"：这俩是选课建议最关键的约束条件
+    # （避免推荐已修/挂科相关的课），单独拼进画像让改写模型看得到。
     s = state.get("student_profile") or {}
     grades = (state.get("tool_results") or {}).get("grades") or []
     taken = [g["course_name"] for g in grades if g.get("course_name")]
@@ -21,16 +24,21 @@ def _profile_text(state: AIState) -> str:
 
 
 def retrieve_node(state: AIState) -> AIState:
+    # 任一前置节点已置 error，直接短路返回。
     if state.get("error"):
         return state
     intent = state.get("intent")
     if intent == "COURSE_RECOMMEND":
         # 提问重写：画像 + 原始提问 → 多角度查询（LLM 失败时降级为单一画像查询）
+        # 选课建议的核心信号是"学生是谁"（画像），而不是"问题怎么问"，所以以画像为检索基线。
         queries = rewrite_queries(_profile_text(state), state.get("query") or "")
     else:
         # 自由问答：以用户提问直接检索课程目录
+        # FREE_QA 没有画像约束，直接用原提问检索课程目录，扩大 RAG 覆盖面兜底回答。
         queries = [state.get("query") or ""]
 
+    # 对多路改写查询逐条做混合检索，再跨查询去重合并：
+    # 同一门课可能被多个角度查询都召回，seen 集合保证只保留一次。
     merged: list[dict] = []
     seen: set[int] = set()
     for q in queries:
@@ -41,6 +49,7 @@ def retrieve_node(state: AIState) -> AIState:
                 seen.add(r["course_id"])
                 merged.append(r)
     # 跨查询按 rerank 分数降序融合后再截断，避免查询1独占 top5 导致提问重写多角度收益丢失
+    # 若不做跨查询重排，先到的查询会把 top5 占满，后面的改写查询召回的更优课程就没机会进结果。
     merged.sort(key=lambda r: r["score"], reverse=True)
     state["retrieved"] = merged[:5]
     return state

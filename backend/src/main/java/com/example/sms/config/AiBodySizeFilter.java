@@ -26,6 +26,8 @@ public class AiBodySizeFilter implements Filter {
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
+        // 仅拦截 /api/ai/chat：Content-Length 超过 64KB 直接 413 拒绝，
+        // 不读取请求体即可拦截超大 JSON，避免占用内存与下游 AI 服务带宽
         if (request instanceof HttpServletRequest httpReq
                 && httpReq.getRequestURI().startsWith("/api/ai/chat")
                 && httpReq.getContentLength() > MAX_BODY_BYTES) {

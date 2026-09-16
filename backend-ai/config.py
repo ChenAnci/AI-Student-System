@@ -3,6 +3,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # pydantic-settings：字段名大写化后与 .env 中的环境变量一一对应（如 mysql_password ↔ MYSQL_PASSWORD）。
+    # env_file 指定读取 backend-ai/.env；extra="ignore" 忽略 .env 里未声明字段，避免多余变量报错。
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # ---- DeepSeek 官方（对话模型，OpenAI 兼容接口）----
@@ -43,6 +45,8 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # fail-fast：数据库密码与 DeepSeek 官方 Key 必须显式配置（.env），禁止空/弱默认值静默启动
+# 启动即校验关键凭据：与其带着空密码/空 Key 跑起来、运行时才报一堆晦涩错误，
+# 不如进程一启动就明确失败，逼迫运维显式配置凭据（避免弱默认凭据上线）。
 if not settings.mysql_password:
     raise RuntimeError("MYSQL_PASSWORD 未配置：请在 backend-ai/.env 中设置数据库密码（禁止弱默认凭据启动）")
 if not settings.deepseek_api_key:

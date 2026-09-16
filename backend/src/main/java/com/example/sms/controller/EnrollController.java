@@ -57,6 +57,7 @@ public class EnrollController {
         if (minCredit != null && maxCredit != null && minCredit.compareTo(maxCredit) > 0) {
             throw new BusinessException("最低学分不能大于最高学分");
         }
+        // 选课中心：学生身份取自当前登录用户（不可指定他人），已选课程用于前端标记 enrolled 状态
         Long studentId = UserContext.getUserId();
         return Result.success(courseService.listPublishedForStudent(studentId,
                 enrollService.enrolledCourseIds(studentId), keyword, minCredit, maxCredit));
@@ -65,6 +66,7 @@ public class EnrollController {
     @ApiOperation("选课")
     @PostMapping("/{courseId}")
     public Result<Void> enroll(@PathVariable Long courseId) {
+        // 学生选课：操作对象是"当前登录学生 + 指定课程"，容量/冲突等校验在 Service 层事务内完成
         enrollService.enroll(UserContext.getUserId(), courseId);
         return Result.success();
     }
@@ -72,6 +74,7 @@ public class EnrollController {
     @ApiOperation("退课")
     @DeleteMapping("/{courseId}")
     public Result<Void> drop(@PathVariable Long courseId) {
+        // 学生退课：同样以当前登录学生为准，成绩已发布的课程不可退
         enrollService.drop(UserContext.getUserId(), courseId);
         return Result.success();
     }
@@ -79,6 +82,7 @@ public class EnrollController {
     @ApiOperation("学生：我的课表")
     @GetMapping("/my")
     public Result<List<CourseCardVO>> myCourses() {
+        // 学生"我的课表"：返回本人已选课程列表（含教师名、是否满员）
         return Result.success(enrollService.myCourses(UserContext.getUserId()));
     }
 
@@ -91,6 +95,7 @@ public class EnrollController {
     @ApiOperation("教秘：手动退课（studentId + courseId）")
     @DeleteMapping("/{courseId}/students/{studentId}")
     public Result<Void> adminDrop(@PathVariable Long courseId, @PathVariable Long studentId) {
+        // 教秘手动退课：显式指定 studentId（教秘代操作），Service 层校验 ADMIN 角色
         enrollService.adminDrop(studentId, courseId);
         return Result.success();
     }
@@ -98,6 +103,7 @@ public class EnrollController {
     @ApiOperation("教秘：代学生选课（studentId + courseId）")
     @PostMapping("/{courseId}/students/{studentId}")
     public Result<Void> adminEnroll(@PathVariable Long courseId, @PathVariable Long studentId) {
+        // 教秘代学生选课：显式指定 studentId，复用学生选课全量校验与通知
         enrollService.adminEnroll(studentId, courseId);
         return Result.success();
     }

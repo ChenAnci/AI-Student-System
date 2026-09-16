@@ -93,6 +93,8 @@ public class AccountService {
     @Transactional
     public void createAccount(AccountCreateDTO dto) {
         checkAdmin();
+        // 教师账号：自动生成 T 工号（如 T1003）；学生账号：自动生成 S 学号（如 S20230004）。
+        // 初始密码统一 123456（由用户首次登录后自行修改），新账号默认 ENABLED 可用
         if ("TEACHER".equals(dto.getRoleType())) {
             Staff staff = new Staff();
             staff.setStaffNo(nextNo("T", false));
@@ -114,6 +116,7 @@ public class AccountService {
             student.setClassName(dto.getClassName());
             student.setEnrollmentYear(dto.getEnrollmentYear());
             student.setPhone(dto.getPhone());
+            // 新学生预设毕业要求学分 160，已修学分与 GPA 从 0 起算，后续随成绩发布逐步累加
             student.setRequiredCredits(DEFAULT_REQUIRED_CREDITS);
             student.setTotalEarnedCredits(BigDecimal.ZERO);
             student.setGpa(BigDecimal.ZERO);
@@ -145,6 +148,8 @@ public class AccountService {
     /** 编辑账号信息（学号/工号与角色不可修改） */
     public void updateAccount(String userType, Long id, AccountUpdateDTO dto) {
         checkAdmin();
+        // 编辑仅允许改姓名/联系方式/专业班级等个人信息；学号/工号与角色作为账号唯一标识不可修改，
+        // 否则会破坏已存在的选课记录、成绩记录与登录身份的关联关系
         if ("STAFF".equals(userType)) {
             Staff staff = staffMapper.selectById(id);
             if (staff == null) throw new BusinessException("账号不存在");
@@ -171,6 +176,8 @@ public class AccountService {
     /** 冻结/启用账号 */
     public void toggleStatus(String userType, Long id, String status) {
         checkAdmin();
+        // 账号状态机：ENABLED(正常)/FROZEN(冻结，不可登录与选课)/SUSPENDED(休学，不可选课)；
+        // 先校验状态枚举合法性，避免脏数据入库
         if (!"ENABLED".equals(status) && !"FROZEN".equals(status) && !"SUSPENDED".equals(status)) {
             throw new BusinessException("非法状态");
         }
@@ -204,6 +211,7 @@ public class AccountService {
     /** 导出学生列表 */
     public void exportStudents(HttpServletResponse response) {
         checkAdmin();
+        // 导出全部学生（不含密码等敏感字段），供线下核对/归档
         List<Student> students = listStudents(null);
         List<StudentExcelRow> rows = students.stream().map(s -> {
             StudentExcelRow r = new StudentExcelRow();
@@ -251,6 +259,7 @@ public class AccountService {
             }
             String no = trimToNull(row.getStudentNo());
             if (no != null) {
+                // 文件内重复（noSet 去重）与库内已存在（selectCount）双重校验，学号留空则由系统自动生成
                 if (!noSet.add(no)) {
                     errors.add("第" + rowNum + "行：学号 " + no + " 在文件中重复");
                     continue;
@@ -276,6 +285,7 @@ public class AccountService {
             student.setRequiredCredits(DEFAULT_REQUIRED_CREDITS);
             student.setTotalEarnedCredits(BigDecimal.ZERO);
             student.setGpa(BigDecimal.ZERO);
+            // 随机初始密码（明文仅此一次随导入结果返回，供线下分发给学生，库中只存 BCrypt 密文）
             String initPwd = randomInitPassword();
             student.setPasswordHash(encoder.encode(initPwd));
             result.add(new AccountImportResultVO(name, student.getStudentNo(), initPwd));
@@ -337,6 +347,7 @@ public class AccountService {
                 continue;
             }
             String role = trimToNull(row.getRoleType());
+            // 安全限制：导入只允许创建教师账号，ADMIN 必须人工创建，防止通过 Excel 批量提权
             if (role != null && !"TEACHER".equals(role)) {
                 errors.add("第" + rowNum + "行：角色仅支持 TEACHER（管理员账号不允许通过导入创建，请在系统中人工创建）");
                 continue;

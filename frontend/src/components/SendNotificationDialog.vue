@@ -52,12 +52,14 @@ const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void; (e: 'sent'): void }>()
 
 const userStore = useUserStore()
+// 仅管理员可按班级/专业/院系/全体发送；老师角色只能按自己的课程发送（后端同样鉴权，前端仅做展示控制）
 const isAdmin = computed(() => userStore.role() === 'ADMIN')
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 const courses = ref<Course[]>([])
 
+// 发送表单：kind 为接收对象类型，默认"按课程"（对老师/管理员都适用，管理员可再切换其它维度）
 const form = reactive<{
   title: string
   content: string
@@ -81,6 +83,7 @@ const rules: FormRules = {
   content: [{ required: true, message: '请输入内容', trigger: 'blur' }]
 }
 
+// 提交发送：先表单校验，再按所选 kind 组装目标参数——只携带当前 kind 对应的字段，其余置 undefined，避免误传脏数据
 async function submit() {
   await formRef.value?.validate()
   const body: SendNotificationBody = {
@@ -107,6 +110,7 @@ async function submit() {
   }
 }
 
+// 关闭弹窗后重置表单与校验状态，避免下次打开残留上次填写的内容
 function reset() {
   Object.assign(form, {
     title: '',

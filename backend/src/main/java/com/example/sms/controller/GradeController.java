@@ -45,6 +45,7 @@ public class GradeController {
     @ApiOperation("教师：录入成绩")
     @PostMapping("/entry")
     public Result<Void> entry(@Valid @RequestBody GradeEntryDTO dto) {
+        // 教师录入/修改成绩：仅 DRAFT 阶段允许，提交后锁定
         gradeService.entryGrades(dto);
         return Result.success();
     }
@@ -52,6 +53,7 @@ public class GradeController {
     @ApiOperation("教师：提交成绩（锁定）")
     @PostMapping("/{courseId}/submit")
     public Result<Void> submit(@PathVariable Long courseId) {
+        // 教师提交成绩：DRAFT -> SUBMITTED，进入教秘审核队列
         gradeService.submitGrades(courseId);
         return Result.success();
     }
@@ -77,6 +79,7 @@ public class GradeController {
     @ApiOperation("教秘：审核通过/退回")
     @PostMapping("/audit")
     public Result<Void> audit(@Valid @RequestBody AuditDTO dto) {
+        // 教秘审核：通过 -> APPROVED 待发布；退回 -> DRAFT 并附原因，教师可修改后重新提交
         gradeService.audit(dto);
         return Result.success();
     }
@@ -84,6 +87,7 @@ public class GradeController {
     @ApiOperation("教秘：发布成绩（核心事务）")
     @PostMapping("/{courseId}/publish")
     public Result<Void> publish(@PathVariable Long courseId) {
+        // 教秘发布成绩：APPROVED -> PUBLISHED，触发学分/GPA 重算并通知学生（核心事务）
         gradeService.publish(courseId);
         return Result.success();
     }
@@ -115,6 +119,7 @@ public class GradeController {
     @ApiOperation("教师：批量导入成绩（返回成功条数）")
     @PostMapping("/course/{courseId}/import")
     public Result<Integer> importGrades(@PathVariable Long courseId, @RequestParam("file") MultipartFile file) {
+        // 教师批量导入成绩：按学号匹配本课程选课学生，返回成功导入条数
         return Result.success(gradeService.importGrades(courseId, file));
     }
 }

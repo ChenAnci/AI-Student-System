@@ -69,9 +69,12 @@ public class GithubOAuthService {
 
     /** 1. 生成 GitHub 授权跳转地址（未配置时抛业务提示） */
     public String buildAuthorizeUrl() {
+        // 客户端凭据缺失时直接给出明确提示而非静默失败，便于运维发现配置遗漏
         if (clientId.isBlank() || clientSecret.isBlank()) {
             throw new BusinessException("GitHub 登录未启用，请联系管理员配置 GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET");
         }
+        // state 防 CSRF：随机值随跳转地址发出，回调时必须原样带回并被校验（consumeState），
+        // 防止攻击者构造恶意回调 URL 诱导受害者携带其授权码（登录劫持/绑定劫持）。
         String state = genState();
         return AUTH_URL + "?client_id=" + enc(clientId)
                 + "&redirect_uri=" + enc(redirectUri)
@@ -83,20 +86,26 @@ public class GithubOAuthService {
         if (code == null || code.isBlank()) {
             throw new BusinessException("授权回调缺少 code");
         }
+        // 校验并消费 state（原子删除）：state 必须是本系统先前发出且未被使用过的，
+        // 一次性校验保证回调确实由我们发起的授权流程触发，而非攻击者伪造的请求。
         if (!consumeState(state)) {
             throw new BusinessException("回调 state 无效或已过期，请重新发起登录");
         }
+        // 用 GitHub 返回的授权码 code 换取 access_token，再拉取用户信息获取全局唯一 uid
         String accessToken = exchangeToken(code);
         JsonNode user = fetchGithubUser(accessToken);
         String uid = String.valueOf(user.path("id").asLong());
         OAuthBinding binding = findBinding(PROVIDER, uid);
         OAuthCallbackVO vo = new OAuthCallbackVO();
         if (binding != null) {
+            // 已绑定过系统账号：直接按绑定关系签发登录态（无需再输密码）。
+            // issueByUserNo 内部仍会校验账号存在且 ENABLED，防止账号被删/停用后继续放行。
             LoginResponse resp = authService.issueByUserNo(binding.getUserNo());
             vo.setStatus("LOGIN_SUCCESS");
             // 回调 URL 不携带 JWT，改为一次性授权码（Redis 短 TTL 缓存登录态）
             vo.setAuthCode(issueAuthCode(resp));
         } else {
+            // 未绑定：返回 GitHub uid 给前端，走 bind 绑定现有账号
             vo.setStatus("NEED_BIND");
             vo.setProviderUid(uid);
         }
@@ -108,10 +117,14 @@ public class GithubOAuthService {
         if (providerUid == null || providerUid.isBlank()) {
             throw new BusinessException("绑定凭证缺失，请重新发起 GitHub 登录");
         }
-        // 防一码多用：该 GitHub uid 必须尚未绑定其他账号
+        // 防一码多用：该 GitHub uid 必须尚未绑定其他账号。
+        // 若不检查，同一 GitHub 账号可被反复绑定到不同系统账号，造成账号归属混乱与越权风险；
+        // 绑定关系一旦建立，后续登录一律按第一条绑定记录签发（见 handleCallback 中 findBinding 取第一条）。
         if (findBinding(PROVIDER, providerUid) != null) {
             throw new BusinessException("该 GitHub 账号已绑定其他账号，请直接登录");
         }
+        // 绑定前必须校验账号密码（verifyAndLogin 与 login 共用同一登录守卫：锁定+限流+ENABLED），
+        // 确保绑定操作由账号本人发起，杜绝"拿别人 uid 直接绑到自己的账号"的越权绑定。
         LoginResponse resp = authService.verifyAndLogin(username.trim(), password);
         OAuthBinding b = new OAuthBinding();
         b.setUserNo(resp.getUserNo());
@@ -142,8 +155,11 @@ public class GithubOAuthService {
         }
         String json = redis.opsForValue().get(AUTH_CODE_KEY + authCode);
         if (json == null) {
+            // 授权码不存在（已被使用或已过期）：拒绝换取。
+            // 120 秒短 TTL + 使用即删除，双重机制保证"一次性"——即便授权码泄露，泄露窗口也被压缩到极小。
             throw new BusinessException("授权码无效或已过期，请重新登录");
         }
+        // 校验通过后立即删除：授权码只能用一次，防止同一 authCode 被重放换取多个登录态。
         redis.delete(AUTH_CODE_KEY + authCode);
         try {
             return mapper.readValue(json, LoginResponse.class);
@@ -213,7 +229,9 @@ public class GithubOAuthService {
         if (state == null) {
             return false;
         }
-        // 原子删除：返回 true 表示存在且仅能消费一次（一次性 + TTL 过期双重兜底）
+        // 原子删除：返回 true 表示存在且仅能消费一次（一次性 + TTL 过期双重兜底）。
+        // 用 DEL 的返回值判断"是否存在"，比"先 GET 判断再 DEL"更安全——
+        // 多实例并发回调时两个请求可能同时 GET 成功，只有 DEL 能保证只有一个请求拿到 true。
         return Boolean.TRUE.equals(redis.delete(STATE_KEY + state));
     }
 

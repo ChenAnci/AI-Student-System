@@ -13,6 +13,8 @@ public class AiConfig {
 
     @Bean
     public RestTemplate aiRestTemplate() {
+        // 专用 RestTemplate：连接 5s 超时快速失败；读超时 60s 兜底 LLM 生成耗时，
+        // 避免 AI 服务长时间无响应时拖死 Tomcat 线程池
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5000);
         factory.setReadTimeout(60_000);

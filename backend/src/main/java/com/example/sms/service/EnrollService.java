@@ -59,6 +59,10 @@ public class EnrollService {
     /** 学生选课 */
     @Transactional
     public void enroll(Long studentId, Long courseId) {
+        // 选课校验顺序设计（先锁后查，环环相扣）：
+        // 1) 先对课程行加 FOR UPDATE 行级锁，把"容量检查 → 写入选课记录 → 计数+1"做成原子串行操作，
+        //    否则并发选课时多个请求会读到相同的 currentEnrolled 并同时通过容量校验，导致实际人数超容量（超卖）；
+        // 2) 锁定后依次校验：课程存在 → 已发布 → 未满员 → 成绩未发布 → 学生存在且状态正常 → 未重复选课 → 无时间冲突。
         // 行级锁（SELECT ... FOR UPDATE）：串行化同课程的容量检查与计数更新，防止并发超选
         Course course = courseMapper.selectByIdForUpdate(courseId);
         if (course == null) throw new BusinessException("课程不存在");
@@ -100,6 +104,7 @@ public class EnrollService {
     /** 学生退课 */
     @Transactional
     public void drop(Long studentId, Long courseId) {
+        // 退课同样先锁课程行：并发退课时若不加锁，两个请求可能同时对同一 currentEnrolled 做 -1，造成计数丢失更新
         // 先锁课程行（SELECT ... FOR UPDATE），串行化退课时的容量计数更新，防止并发退课丢失更新
         Course course = courseMapper.selectByIdForUpdate(courseId);
         if (course == null) throw new BusinessException("课程不存在");
@@ -124,6 +129,8 @@ public class EnrollService {
 
     /** 校验上课时间冲突（支持"周一 1-2节"、多段以分号分隔） */
     private void checkScheduleConflict(Long studentId, Course newCourse) {
+        // 新课未排课则无需冲突检查；否则一次子查询取出该学生已选的全部课程（仅取 course_id），
+        // 逐门与新课做排课时间片比较，任一时间重叠即拒绝选课，防止学生同一时段上两门课。
         if (newCourse.getSchedule() == null || newCourse.getSchedule().isBlank()) return;
         List<Course> myCourses = courseMapper.selectList(new LambdaQueryWrapper<Course>()
                 .inSql(Course::getId,
@@ -138,6 +145,7 @@ public class EnrollService {
 
     /** 解析并比较两段排课时间是否有重叠 */
     private boolean hasConflict(String s1, String s2) {
+        // 两段排课各自解析为时间片集合后两两比较；同一星期且区间互相穿插（左闭右开 start < end）即判冲突
         for (TimeSlot t1 : parseSlots(s1)) {
             for (TimeSlot t2 : parseSlots(s2)) {
                 if (t1.day == t2.day && t1.start < t2.end && t2.start < t1.end) {
@@ -152,6 +160,9 @@ public class EnrollService {
     private static final Pattern SLOT_PATTERN = Pattern.compile("(\\d+)\\s*[-~—至]\\s*(\\d+)节");
 
     private List<TimeSlot> parseSlots(String schedule) {
+        // 解析排课文本，如"周一 1-2节;周三 3-4节"：按 ;；，, 分号/逗号切成多段，
+        // 每段分别用正则提取"周X"和"起始-结束节"；end 取"末节+1"转成左闭右开区间 [start, end)，
+        // 这样"1-2节"=[1,3)、"3-4节"=[3,5) 首尾相接不会误判为重叠。
         List<TimeSlot> result = new ArrayList<>();
         for (String seg : schedule.split("[;；，,]")) {
             Matcher dayMatcher = DAY_PATTERN.matcher(seg);
@@ -168,6 +179,7 @@ public class EnrollService {
     }
 
     private int dayOfWeek(char c) {
+        // 星期映射为 1-7 数字（日=7），便于后续区间比较
         switch (c) {
             case '一': return 1;
             case '二': return 2;
@@ -207,6 +219,7 @@ public class EnrollService {
 
     /** 教秘：选课监控 */
     public List<EnrollMonitorVO> monitor() {
+        // 教秘选课监控：列出全部课程并按更新时间倒序，计算每门课的剩余名额，便于及时发现热门/满员课程
         List<Course> courses = courseMapper.selectList(new LambdaQueryWrapper<Course>()
                 .orderByDesc(Course::getUpdatedAt));
         Map<Long, Staff> teacherMap = courseService.loadTeachers(courses);
@@ -224,6 +237,7 @@ public class EnrollService {
     /** 教秘：手动退课 */
     @Transactional
     public void adminDrop(Long studentId, Long courseId) {
+        // 教秘代退课：先做角色鉴权，再复用学生退课逻辑（含成绩已发布不可退等全部校验），保持口径一致
         if (!"ADMIN".equals(UserContext.getRole())) {
             throw new BusinessException(403, "无权限，仅教学秘书可操作");
         }
@@ -237,6 +251,7 @@ public class EnrollService {
      */
     @Transactional
     public void adminEnroll(Long studentId, Long courseId) {
+        // 教秘代学生选课：角色校验后直接复用 enroll 的全部业务校验与通知逻辑（见上方注释）
         if (!"ADMIN".equals(UserContext.getRole())) {
             throw new BusinessException(403, "无权限，仅教学秘书可操作");
         }

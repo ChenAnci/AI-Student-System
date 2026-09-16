@@ -22,10 +22,15 @@ REWRITE_PROMPT = (
 def rewrite_queries(profile: str, query: str) -> list[str]:
     """返回改写后的检索查询列表；LLM 异常时降级为 [profile]。"""
     try:
+        # 提问重写：把"学生画像 + 原始提问"喂给 LLM，让它产出 2-3 条不同角度的检索查询。
+        # 选课建议的检索信号是画像本身（专业/兴趣/学分偏好），单一查询很难覆盖所有维度，
+        # 多角度改写可显著提升向量/关键词召回的质量。
         resp = get_llm().invoke(REWRITE_PROMPT.format(profile=profile, query=query))
         lines = [ln.strip() for ln in str(resp.content).splitlines() if ln.strip()]
         if lines:
+            # 最多取 3 条：查询过多会拖慢检索与 rerank，且边际收益递减。
             return lines[:3]
     except Exception:
+        # LLM 失败时降级为只拿画像本身作为查询（检索仍可用，只是角度单一）。
         pass
     return [profile]

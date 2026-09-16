@@ -38,6 +38,7 @@ public class AiController {
     @PostMapping("/chat")
     public Result<Map<String, String>> chat(@RequestBody Map<String, Object> body,
                                             HttpServletRequest request) {
+        // AI 问答接口：仅学生/管理员可用；后端只做鉴权与透传转发，不接触 AI 业务逻辑
         UserContext.CurrentUser user = UserContext.get();
         if (user == null || user.getRoleType() == null) {
             return Result.error(401, "未登录");

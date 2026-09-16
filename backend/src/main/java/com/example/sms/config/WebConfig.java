@@ -25,6 +25,9 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        // JWT 拦截器覆盖全部 /api/**（业务接口）+ 文档路径。
+        // 注意：/api/** 已包含 /api/auth/login 与 /api/oauth/**，因此必须显式排除，
+        // 否则登录与 OAuth 回调（本就不能携带 Token）会被误判为未登录而 401。
         InterceptorRegistration reg = registry.addInterceptor(jwtInterceptor)
                 .addPathPatterns("/api/**", "/doc.html", "/v2/api-docs", "/v3/api-docs",
                         "/swagger-resources/**", "/webjars/**")
@@ -43,7 +46,8 @@ public class WebConfig implements WebMvcConfigurer {
                     "/v3/api-docs"
             );
         }
-        // 登录接口 IP 维度限流（Redis，多实例共享计数）
+        // 登录接口 IP 维度限流（Redis，多实例共享计数）：
+        // 只注册到 /api/auth/login 这一个路径，限流拦截器内部对非登录 URI 也会直接放行，双保险。
         registry.addInterceptor(rateLimitInterceptor)
                 .addPathPatterns("/api/auth/login");
     }

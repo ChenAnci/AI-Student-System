@@ -124,8 +124,10 @@ import { Search } from '@element-plus/icons-vue'
 import { courseCenter, enroll, drop, type CourseCenterQuery } from '@/api/enroll'
 import type { CourseCardVO } from '@/types'
 
+// 状态筛选项：全部 / 可选 / 已满 / 已选（前端本地过滤，不请求后端）
 type StatusFilter = 'all' | 'available' | 'full' | 'enrolled'
 
+// 卡片展示用扩展：remain=剩余名额（展示/余量判断），conflict=与已选课程时间冲突（禁用选课）
 interface DisplayCourse extends CourseCardVO {
   remain: number
   conflict: boolean
@@ -138,6 +140,7 @@ const creditRange = ref('')
 const statusFilter = ref<StatusFilter>('all')
 
 // ===== 选课概览统计 =====
+// 全部基于已加载课程列表在前端计算（无需额外接口）：已选门数、已获学分合计、可选余量、课程总数
 const enrolledList = computed(() => courses.value.filter((c) => c.enrolled))
 const enrolledCount = computed(() => enrolledList.value.length)
 const earnedCredits = computed(() => enrolledList.value.reduce((s, c) => s + Number(c.credit || 0), 0))
@@ -145,6 +148,7 @@ const availableCount = computed(() => courses.value.filter((c) => !c.enrolled &&
 const totalCount = computed(() => courses.value.length)
 
 // ===== schedule 解析（与 SchedulePicker 一致：如 "周一 1-2节;周三 3-4节"）=====
+// 把排课文本解析为「周X-第N节」的时段集合，供后续做选课时间冲突检测
 function scheduleSlots(text?: string): Set<string> {
   const set = new Set<string>()
   if (!text) return set
@@ -160,12 +164,14 @@ function scheduleSlots(text?: string): Set<string> {
 }
 
 // 已选课程占用的全部时段（用于冲突标记）
+// 把每门已选课的时段并入同一集合，供 hasConflict 做交集比对
 const enrolledSlots = computed(() => {
   const set = new Set<string>()
   for (const c of enrolledList.value) scheduleSlots(c.schedule).forEach((k) => set.add(k))
   return set
 })
 
+// 判断某课程是否与已选课程时间冲突（已选课程自身不算冲突）
 function hasConflict(course: CourseCardVO): boolean {
   if (course.enrolled) return false
   for (const k of scheduleSlots(course.schedule)) if (enrolledSlots.value.has(k)) return true
@@ -181,6 +187,7 @@ const filteredByStatus = computed(() => {
   return list
 })
 
+// 最终展示列表：补全剩余名额（remain，Math.max 下限 0 防负数）与时间冲突标记，供卡片渲染与选课按钮禁用判断
 const displayCourses = computed<DisplayCourse[]>(() =>
   filteredByStatus.value.map((c) => ({
     ...c,
@@ -197,12 +204,15 @@ function cardStatus(c: DisplayCourse): { text: string; tagClass: string } {
 }
 
 // ===== 加载（关键词 / 学分范围变化防抖后重新请求后端）=====
+// 400ms 防抖：避免每敲一个字符都触发一次接口请求；状态筛选（statusFilter）走前端过滤，不走接口
 let debounceTimer: ReturnType<typeof setTimeout> | undefined
 watch([keyword, creditRange], () => {
   clearTimeout(debounceTimer)
   debounceTimer = setTimeout(load, 400)
 })
 
+// 从后端加载选课中心课程：仅把关键词与学分区间传给后端过滤；
+// 学分范围 "1-2" / "5+" 拆成 minCredit / maxCredit（"5+" 无上限则不传 max）
 async function load() {
   loading.value = true
   try {
@@ -219,12 +229,14 @@ async function load() {
   }
 }
 
+// 选课：成功后重新加载列表（剩余名额、已选标记、冲突状态都会随之变化）
 async function handleEnroll(course: CourseCardVO) {
   await enroll(course.id)
   ElMessage.success(`选课成功：${course.courseName}`)
   load()
 }
 
+// 退课：二次确认（提示"名额立即释放"，防止误操作）后调用退课接口并刷新列表
 function handleDrop(course: CourseCardVO) {
   ElMessageBox.confirm(`确定退选「${course.courseName}」吗？退课后名额立即释放`, '退课确认', {
     type: 'warning'

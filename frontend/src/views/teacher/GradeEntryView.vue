@@ -88,6 +88,7 @@ const importing = ref(false)
 const students = ref<CourseStudentItem[]>([])
 const audits = ref<Awaited<ReturnType<typeof myAudits>>>([])
 const myCourses = ref<MyCourseVO[]>([])
+// 页内课程选择器当前值（0=未选）；locked=成绩是否锁定（非"录入中"状态不可编辑）；gradeFileRef=隐藏的文件输入框引用
 const selectedCourseId = ref<number>(0)
 const locked = ref(false)
 const gradeFileRef = ref<HTMLInputElement>()
@@ -130,6 +131,8 @@ function markLabel(mark: string) {
   return map[mark] || mark
 }
 
+// 标记变化联动：改为缓考/缺考/舞弊时清空成绩（这类学生不评成绩）；
+// 改回 NORMAL 时保留原成绩（若有），避免误清
 function onMarkChange(row: CourseStudentItem, val: string) {
   if (val === 'NORMAL') {
     row.score = row.score ?? undefined
@@ -138,6 +141,9 @@ function onMarkChange(row: CourseStudentItem, val: string) {
   }
 }
 
+// 加载当前课程：并行获取审核流程状态与选课学生名单；
+// score 统一转 number、mark 默认 NORMAL（保证输入框/下拉的初始值正确）；
+// 仅 DRAFT（录入中）状态可编辑，其余（已提交/已通过/已发布）一律锁定
 async function load() {
   if (!courseId.value) return
   loading.value = true
@@ -155,6 +161,7 @@ async function load() {
   }
 }
 
+// 提交前校验：NORMAL 状态必须有 0-100 的成绩；缓考/缺考/舞弊等标记的学生无需成绩
 function validate(): boolean {
   for (const s of students.value) {
     if (s.mark === 'NORMAL' && (s.score === undefined || s.score === null)) {
@@ -188,6 +195,7 @@ async function handleSave() {
   }
 }
 
+// 提交审核：提交后状态变为 SUBMITTED、成绩锁定不可再修改，故需二次确认
 function handleSubmit() {
   if (!validate()) return
   ElMessageBox.confirm('提交后成绩将锁定，不可再修改，确定提交给教学秘书审核吗？', '提交确认', {
@@ -199,16 +207,19 @@ function handleSubmit() {
   })
 }
 
+// 下载 Excel 导入模板（含该课程学生名单与填写格式）
 async function handleTemplate() {
   const blob = await downloadGradeTemplate(courseId.value)
   saveBlob(blob, datedFilename(`成绩导入模板_${courseName.value}`))
 }
 
+// 导出当前课程成绩名单为 Excel
 async function handleExport() {
   const blob = await exportCourseStudents(courseId.value)
   saveBlob(blob, datedFilename(`成绩_${courseName.value}`))
 }
 
+// 批量导入成绩：读取所选 xlsx 上传，成功后刷新列表；无论成败都清空 input.value 以便下次选择同一文件可再次触发 change
 async function handleImport(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
@@ -224,10 +235,13 @@ async function handleImport(e: Event) {
   }
 }
 
+// 页内切换课程：立即加载该课程数据（含锁定状态切换）
 watch(selectedCourseId, (val) => {
   if (val) load()
 })
 
+// 路由参数 courseId 变化（如从"我的课程"页点击某课程跳入）时同步到选择器；
+// 加 !== 判断防止与选择器自身变更互相触发、重复加载
 watch(
   () => route.params.courseId,
   (val) => {
@@ -239,6 +253,7 @@ watch(
 )
 
 onMounted(async () => {
+  // 初始化老师自己的课程列表（供页内选择器使用），再尝试从路由取 courseId 直接选中
   try {
     myCourses.value = await listMyCourses()
   } catch {

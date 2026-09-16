@@ -67,8 +67,10 @@ import type { NotificationItem } from '@/types'
 import SendNotificationDialog from '@/components/SendNotificationDialog.vue'
 
 const userStore = useUserStore()
+// 老师/教秘看"发送记录"（发件箱），学生看"我的通知"（收件箱），据此分流接口、按钮与表格列
 const isStaff = computed(() => userStore.role() === 'TEACHER' || userStore.role() === 'ADMIN')
 
+// 分页状态：列表数据 / 当前页 / 每页条数 / 总数（el-pagination 组件依赖）
 const list = ref<NotificationItem[]>([])
 const page = ref(1)
 const size = 10
@@ -77,6 +79,7 @@ const detailVisible = ref(false)
 const detail = ref<NotificationItem | null>(null)
 const sendVisible = ref(false)
 
+// 按角色加载数据：老师/教秘调 sent（发件箱），学生调 inbox（收件箱）
 async function load() {
   try {
     const p = isStaff.value ? await sent(page.value, size) : await inbox(page.value, size)
@@ -87,11 +90,13 @@ async function load() {
   }
 }
 
+// 打开详情弹窗：直接展示行数据，无需额外请求
 function openDetail(row: NotificationItem) {
   detail.value = row
   detailVisible.value = true
 }
 
+// 全部已读：调用接口后刷新列表（read 状态随之更新，角标由 store 在刷新后重新同步）
 async function handleReadAll() {
   try {
     await readAll()
@@ -102,6 +107,7 @@ async function handleReadAll() {
   }
 }
 
+// 通知类型 → 中文标签 / 标签颜色（与后端 NotificationType 枚举对应），未知类型兜底为"通知/info"
 function typeLabel(type: string) {
   const map: Record<string, string> = {
     MANUAL: '通知',

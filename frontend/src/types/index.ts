@@ -1,13 +1,16 @@
 /** 通用类型定义 */
 
+// 后端统一响应包装：code===200 成功，data 为业务数据；拦截器已解包 data
 export interface Result<T = unknown> {
   code: number
   message: string
   data: T
 }
 
+// 系统三种角色：教学秘书（ADMIN）/ 教师（TEACHER）/ 学生（STUDENT）
 export type RoleType = 'ADMIN' | 'TEACHER' | 'STUDENT'
 
+// 登录响应：token 用于后续请求鉴权，其余为用户基础信息（角色、姓名、学号/工号等）
 export interface LoginResponse {
   token: string
   userId: number
@@ -26,6 +29,7 @@ export interface OAuthCallbackResult {
   providerUid?: string
 }
 
+// 教职员工（老师/教学秘书）账号信息，用于账号管理列表
 export interface Staff {
   id: number
   staffNo: string
@@ -37,6 +41,7 @@ export interface Staff {
   createdAt?: string
 }
 
+// 学生账号信息，用于账号管理列表与详情展示
 export interface Student {
   id: number
   studentNo: string
@@ -53,6 +58,7 @@ export interface Student {
   gpa?: number
 }
 
+// 课程基础信息：容量/已选人数用于余量判断，status 控制是否开放选课
 export interface Course {
   id: number
   courseCode: string
@@ -89,6 +95,7 @@ export interface CourseCardVO {
   full: boolean
 }
 
+// 选课监控列表项：展示每门课的选课余量（remain）
 export interface EnrollMonitorVO {
   courseId: number
   courseCode: string
@@ -100,6 +107,7 @@ export interface EnrollMonitorVO {
   status: string
 }
 
+// 开课审核（Audit）列表项：展示课程审核流程各节点时间与退回原因
 export interface AuditVO {
   courseId: number
   courseCode: string
@@ -112,6 +120,7 @@ export interface AuditVO {
   rejectReason?: string
 }
 
+// 学生某门课程的成绩视图：score 分数 + mark 标记（缓考/缺考/舞弊）+ 审核状态 + 是否通过
 export interface GradeVO {
   courseId: number
   courseName: string
@@ -130,6 +139,7 @@ export interface DashboardData {
   gradeList: GradeVO[]
 }
 
+// 成绩录入表格行：某课程下的一位学生及其成绩/标记；locked 表示该行是否已锁定不可改
 export interface CourseStudentItem {
   studentId: number
   studentNo: string
@@ -178,8 +188,10 @@ export interface TeacherStats {
 }
 
 /** 站内通知 */
+// 站内通知类型：手动通知 / 成绩发布 / 调课 / 选课 四类
 export type NotificationType = 'MANUAL' | 'GRADE_PUBLISH' | 'COURSE_CHANGE' | 'ENROLL'
 
+// 单条通知（含收件记录 receiverId 与已读标记 read）
 export interface NotificationItem {
   id: number
   receiverId?: number
@@ -191,6 +203,7 @@ export interface NotificationItem {
   createdAt: string
 }
 
+// 通用分页结果：records 为当前页数据，total 总数，其余为分页信息
 export interface PageResult<T> {
   records: T[]
   total: number

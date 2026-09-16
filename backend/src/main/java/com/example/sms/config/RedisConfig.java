@@ -51,10 +51,16 @@ public class RedisConfig {
                 .allowIfSubType("java.lang.")
                 .allowIfSubType("java.math.")
                 .build();
+        // 开启默认类型信息（@class 字段）用于 JSON 反序列化时还原具体类型。
+        // 安全关键点：通过上面的 BasicPolymorphicTypeValidator 做白名单校验——反序列化只允许落在
+        // 项目包与 JDK 常用值类型内的 class，Redis 即使被外部写入恶意 JSON（gadget 链）也无法
+        // 反序列化到任意攻击类，从根源上缓解 Redis 反序列化 RCE 风险。
         ObjectMapper mapper = new ObjectMapper();
         mapper.activateDefaultTyping(typeValidator, ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
 
         RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
+                // 默认 TTL 30s：业务缓存（如统计、列表）允许短时间陈旧，30 秒足够显著降低
+                // DB/计算压力，又不会让用户看到明显过期的数据；比长 TTL 更不易积累脏数据。
                 .entryTtl(Duration.ofSeconds(30))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(new GenericJackson2JsonRedisSerializer(mapper)));

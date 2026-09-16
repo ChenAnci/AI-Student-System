@@ -110,6 +110,8 @@ public class GradeService {
     public int importGrades(Long courseId, MultipartFile file) {
         Course course = checkTeacherCourse(courseId);
         CourseGradeAudit audit = getAudit(course);
+        // 成绩流程状态机：DRAFT(录入/导入) -> SUBMITTED(提交) -> APPROVED(审核通过) -> PUBLISHED(发布锁定)。
+        // 只有 DRAFT 阶段允许批量导入/修改，一旦提交便进入审批流，防止已审核的成绩被事后篡改。
         if (!"DRAFT".equals(audit.getStatus())) {
             throw new BusinessException("成绩已提交/审核/发布，当前不可导入");
         }
@@ -118,6 +120,7 @@ public class GradeService {
         if (scs.isEmpty()) {
             throw new BusinessException("该课程暂无学生选课，无法导入成绩");
         }
+        // 先把"学号 -> 选课记录"建成内存映射，逐行导入时 O(1) 匹配，避免每行都查一次库
         Map<String, StudentCourse> scMap = buildStudentNoMap(scs);
 
         List<ExcelUtil.RowItem<GradeExcelRow>> rows = ExcelUtil.readWithRowNumbers(file, GradeExcelRow.class);
@@ -139,6 +142,8 @@ public class GradeService {
                 errors.add("第" + rowNum + "行：学号 " + no + " 未选修本课程");
                 continue;
             }
+            // 标记校验：NORMAL(正常)/DEFER(缓考)/ABSENT(缺考)/CHEAT(作弊)。
+            // 只有 NORMAL 才要求并保存 0-100 的分数；其余标记无有效成绩，统一清空 score（保留标记本身）
             String mark = trimToNull(row.getMark());
             if (mark == null) mark = "NORMAL";
             if (!VALID_MARKS.contains(mark)) {
@@ -162,6 +167,7 @@ public class GradeService {
             sc.setMark(mark);
             toUpdate.add(sc);
         }
+        // 全表校验通过后才统一落库（先整体校验、有错整批拒绝），避免出现"部分行已更新、部分行报错"的中间态
         if (!errors.isEmpty()) {
             throw new BusinessException("导入失败（共 " + errors.size() + " 处错误），请修正后重新导入：\n"
                     + String.join("\n", errors.subList(0, Math.min(errors.size(), 10))));
@@ -349,6 +355,8 @@ public class GradeService {
         if (course == null) throw new BusinessException("课程不存在");
         CourseGradeAudit audit = auditMapper.selectOne(new LambdaQueryWrapper<CourseGradeAudit>()
                 .eq(CourseGradeAudit::getCourseId, courseId));
+        // 发布是成绩流程的最后一步且不可逆：仅 APPROVED 可发布（跳过审核直接发布视为越权），
+        // 发布后成绩对外可见并计入学生学分/GPA，同时选课/退课也被锁定，因此必须先有审核通过结论
         if (audit == null || !"APPROVED".equals(audit.getStatus())) {
             throw new BusinessException("仅审核通过的课程可以发布");
         }
@@ -356,6 +364,8 @@ public class GradeService {
         audit.setPublishedAt(LocalDateTime.now());
         auditMapper.updateById(audit);
 
+        // 逐学生重算学分/GPA：同一学生可能同时受多门课发布影响，
+        // 因此按学生维度整体重算（而非在本课程基础上累加），保证口径一致
         List<StudentCourse> scs = studentCourseMapper.selectList(new LambdaQueryWrapper<StudentCourse>()
                 .eq(StudentCourse::getCourseId, courseId));
         for (StudentCourse sc : scs) {
@@ -374,6 +384,8 @@ public class GradeService {
         Student student = studentMapper.selectById(studentId);
         if (student == null) return;
 
+        // 只统计"已发布"课程的成绩：未发布/审核中的成绩尚未定论，不得计入已修学分与 GPA，
+        // 否则学生仪表盘会随教师改分而波动，且与成绩单口径不一致
         List<Long> publishedCourseIds = auditMapper.selectList(new LambdaQueryWrapper<CourseGradeAudit>()
                         .eq(CourseGradeAudit::getStatus, "PUBLISHED"))
                 .stream().map(CourseGradeAudit::getCourseId).collect(Collectors.toList());
@@ -381,6 +393,8 @@ public class GradeService {
             resetCredits(student, BigDecimal.ZERO, BigDecimal.ZERO);
             return;
         }
+        // 通过条件：标记 NORMAL 且总评 >= 60（缓考/缺考/作弊不获得学分）；
+        // 在此基础上按"学分加权"计算 GPA（每门课绩点 × 学分 求和 ÷ 总学分）
         List<StudentCourse> passed = studentCourseMapper.selectList(new LambdaQueryWrapper<StudentCourse>()
                 .eq(StudentCourse::getStudentId, studentId)
                 .in(StudentCourse::getCourseId, publishedCourseIds)
@@ -420,6 +434,7 @@ public class GradeService {
 
     /** 百分制 -> 4 分制绩点 */
     private BigDecimal toGradePoint(BigDecimal score) {
+        // 4 分制绩点换算：90+ → 4.0，80-89 → 3.0，70-79 → 2.0，60-69 → 1.0，60 以下 → 0
         double s = score.doubleValue();
         if (s >= 90) return new BigDecimal("4.0");
         if (s >= 80) return new BigDecimal("3.0");
@@ -495,6 +510,8 @@ public class GradeService {
     }
 
     private CourseGradeAudit getAudit(Course course) {
+        // 首次接触成绩（录入/导入）时懒创建审核记录：初始 DRAFT 状态、归属该课程授课教师，
+        // 后续提交/审核/发布都围绕这条记录推进状态机
         CourseGradeAudit audit = auditMapper.selectOne(new LambdaQueryWrapper<CourseGradeAudit>()
                 .eq(CourseGradeAudit::getCourseId, course.getId()));
         if (audit == null) {

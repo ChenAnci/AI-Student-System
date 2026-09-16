@@ -64,8 +64,10 @@ public class CourseService {
             }
             course.setTeacherId(requireValidTeacher(dto.getTeacherId()).getId());
         } else {
+            // 教师创建：授课人强制取当前登录教师（忽略请求里的 teacherId，防止教师替别人建课）
             course.setTeacherId(UserContext.getUserId());
         }
+        // 新课程统一以未发布状态落库：容量计数从 0 开始，未发布前学生不可见、不可选
         course.setCurrentEnrolled(0);
         course.setStatus("UNPUBLISHED");
         courseMapper.insert(course);
@@ -124,6 +126,8 @@ public class CourseService {
     /** 发布课程（锁定） */
     public void publishCourse(Long id) {
         Course course = getEditableCourse(id);
+        // 发布是单向状态机：UNPUBLISHED -> PUBLISHED 后即"锁定"，
+        // 之后不可再改课程基本信息、不可删除，仅允许调课；保证选课与成绩流程以稳定口径进行。
         if ("PUBLISHED".equals(course.getStatus())) {
             throw new BusinessException("课程已发布");
         }
@@ -135,6 +139,8 @@ public class CourseService {
     @Transactional
     public void deleteCourse(Long id) {
         Course course = getEditableCourse(id);
+        // 已发布课程涉及学生选课与成绩流程，删除会造成数据孤儿，故禁止；
+        // 即便未发布，只要有学生选课记录也不可删（保证 student_course 无悬挂引用）
         if ("PUBLISHED".equals(course.getStatus())) {
             throw new BusinessException("已发布课程不可删除");
         }
@@ -150,6 +156,8 @@ public class CourseService {
     private Course getEditableCourse(Long id) {
         Course course = courseMapper.selectById(id);
         if (course == null) throw new BusinessException("课程不存在");
+        // 权限归属校验：教学秘书（ADMIN）可操作全部课程；教师只能操作"自己名下"的课程，
+        // 防止教师越权改/删他人课程（所有课程写操作都先经过此方法）
         if (!isAdmin() && !course.getTeacherId().equals(UserContext.getUserId())) {
             throw new BusinessException(403, "无权限操作他人课程");
         }
@@ -158,6 +166,7 @@ public class CourseService {
 
     /** 教师端：我的课程（含成绩审核状态） */
     public List<MyCourseVO> listMyCourses() {
+        // 教师端"我的课程"：只查当前登录教师名下的课程，按更新时间倒序
         List<Course> courses = courseMapper.selectList(new LambdaQueryWrapper<Course>()
                 .eq(Course::getTeacherId, UserContext.getUserId())
                 .orderByDesc(Course::getUpdatedAt));
@@ -166,6 +175,7 @@ public class CourseService {
 
     /** 教秘端：全部课程 */
     public List<MyCourseVO> listAllCourses(String keyword) {
+        // 教秘可查看全部课程，支持按课程名/课程代码模糊搜索（关键词为空时不过滤）
         LambdaQueryWrapper<Course> wrapper = new LambdaQueryWrapper<>();
         wrapper.and(keyword != null && !keyword.isBlank(), w -> w
                         .like(Course::getCourseName, keyword)

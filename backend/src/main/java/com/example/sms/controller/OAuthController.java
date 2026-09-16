@@ -60,6 +60,8 @@ public class OAuthController {
     @GetMapping("/github/authorize")
     public Result<Map<String, String>> authorize(HttpServletRequest request) {
         try {
+            // 每 IP 轻量限流：authorize 无鉴权、可被任意调用，每次调用都会在 Redis 落一个 state key，
+            // 若不加限制可被批量刷量造成 Redis 内存膨胀（R-2）；这里用与登录一致的原子计数脚本。
             Long count = redis.execute(RedisConfig.INCR_EXPIRE_SCRIPT,
                     Collections.singletonList(AUTHORIZE_RATE_KEY + request.getRemoteAddr()),
                     String.valueOf(AUTHORIZE_RATE_SECONDS));
@@ -79,21 +81,27 @@ public class OAuthController {
                                  @RequestParam(value = "state", required = false) String state) {
         OAuthCallbackVO vo = githubOAuthService.handleCallback(code, state);
         if ("LOGIN_SUCCESS".equals(vo.getStatus())) {
-            // 回调 URL 不携带 JWT，携带一次性授权码（回调页凭此换取登录态）
+            // 回调 URL 不携带 JWT，携带一次性授权码（回调页凭此换取登录态）。
+            // 原因：回调 URL 会出现在浏览器历史/跳转记录/第三方日志中，JWT 直接暴露风险高；
+            // 改用 120 秒一次性授权码，由前端回调页再调 exchange 接口换取，降低泄露面。
             return new RedirectView(frontBase + "/oauth/callback?authCode=" + enc(vo.getAuthCode()));
         }
+        // 未绑定：把 GitHub uid 带回前端，引导用户走 bind 绑定现有账号（uid 本身不含敏感信息）
         return new RedirectView(frontBase + "/oauth/callback?needBind=1&providerUid=" + enc(vo.getProviderUid()));
     }
 
     @ApiOperation("用一次性授权码换取登录态（回调页调用，避免 JWT 暴露在 URL）")
     @PostMapping("/github/exchange")
     public Result<LoginResponse> exchange(@RequestBody Map<String, String> body) {
+        // 换取登录态：服务端校验授权码存在并一次性删除，见 GithubOAuthService.exchangeAuthCode
         return Result.success(githubOAuthService.exchangeAuthCode(body.get("authCode")));
     }
 
     @ApiOperation("绑定现有账号并登录")
     @PostMapping("/github/bind")
     public Result<LoginResponse> bind(@Valid @RequestBody OAuthBindDTO dto) {
+        // 绑定必须走"账号密码校验"（AuthService.verifyAndLogin 复用登录守卫），
+        // 防止攻击者拿着截获的 providerUid 直接绑定到他人账号。
         return Result.success(githubOAuthService.bind(dto.getUsername(), dto.getPassword(), dto.getProviderUid()));
     }
 

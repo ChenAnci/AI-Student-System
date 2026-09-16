@@ -28,6 +28,7 @@ const routes: RouteRecordRaw[] = [
     meta: { public: true, title: '绑定账号' }
   },
   {
+    // 登录后的主框架布局：所有需要登录的页面都挂在其 children 下，统一共享侧栏/顶栏
     path: '/',
     component: () => import('@/layouts/MainLayout.vue'),
     redirect: '/student/dashboard',
@@ -61,6 +62,10 @@ const router = createRouter({
   routes
 })
 
+// 全局路由守卫：登录态 + 角色权限两道关卡
+// 1) 公开页（meta.public）：已登录则跳转到角色首页，未登录放行（门户/登录/OAuth 页）
+// 2) 非公开页：未登录一律踢到 /login
+// 3) 已登录但角色不在该路由 meta.roles 白名单内：重定向到该角色的默认首页（防越权，如学生直闯教师页）
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
   const isLogin = userStore.isLogin()
@@ -77,6 +82,7 @@ router.beforeEach((to, from, next) => {
   next()
 })
 
+// 各角色的默认首页（登录后跳转 / 越权访问时的兜底重定向目标）
 function homeByRole(role?: RoleType): string {
   switch (role) {
     case 'ADMIN':

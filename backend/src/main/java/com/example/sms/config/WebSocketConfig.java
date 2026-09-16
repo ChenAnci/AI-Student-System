@@ -24,6 +24,8 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(notificationWebSocketHandler, "/ws/notifications")
+                // 允许任意来源跨域连接：前端与后端可能分属不同端口/域名（开发环境常见）；
+                // WebSocket 握手不携带 Cookie 等凭据（认证改走 AUTH 消息），故通配 origin 不会引入 CSRF 类风险
                 .setAllowedOriginPatterns("*");
     }
 

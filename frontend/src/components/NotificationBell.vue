@@ -36,9 +36,12 @@ import { inbox, markRead } from '@/api/notification'
 import type { NotificationItem } from '@/types'
 
 const router = useRouter()
+// 未读角标直接读取全局 notification store，与 WS 实时推送保持同步（收到新通知自动 +1）
 const store = useNotificationStore()
+// 下拉面板中的最新通知预览（最多 5 条）
 const items = ref<NotificationItem[]>([])
 
+// 下拉展开时拉取最新 5 条预览（点击铃铛才请求，不做常驻轮询，减少无谓请求）
 async function load() {
   try {
     const page = await inbox(1, 5)
@@ -52,6 +55,7 @@ function goAll() {
   router.push('/notifications')
 }
 
+// 点击某条通知：未读则先标记已读（同步扣减角标计数，Math.max 防止重复点击/并发扣成负数），再跳转通知中心查看详情
 async function open(n: NotificationItem) {
   if (n.receiverId && !n.read) {
     try {
