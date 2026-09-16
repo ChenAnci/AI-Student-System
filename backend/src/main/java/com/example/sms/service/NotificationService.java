@@ -66,11 +66,16 @@ public class NotificationService {
     /** 手动发送（发送者取自 UserContext，老师仅可发给自己的课程学生） */
     @Transactional
     public void send(SendNotificationDTO dto) {
+        UserContext.CurrentUser user = UserContext.get();
+        // 权限边界：教师只能按课程发送且必须为自己的课程（防止绕过前端隐藏选项，直接调用接口用 STUDENT_IDS/ALL 等发给任意学生）
+        if ("TEACHER".equals(user.getRoleType())
+                && !"COURSE".equals(dto.getTarget().getKind())) {
+            throw new BusinessException(403, "教师只能向自己授课课程的学生发送通知");
+        }
         List<Long> studentIds = resolveTargets(dto.getTarget());
         if (studentIds.isEmpty()) {
             throw new BusinessException("未匹配到任何学生");
         }
-        UserContext.CurrentUser user = UserContext.get();
         doSend("MANUAL", dto.getTitle().trim(), dto.getContent().trim(),
                 user.getRoleType(), user.getUserId(), user.getRealName(), studentIds);
     }

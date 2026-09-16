@@ -233,6 +233,7 @@ public class EnrollService {
     /**
      * 教秘：代学生选课（复用学生选课的全部校验：课程已发布、容量、重复选课、学生状态、成绩已发布等）
      * 本方法开启事务，保证选课记录与容量计数原子提交。
+     * 选课成功通知由 enroll 内部统一发送（避免代选时重复通知）。
      */
     @Transactional
     public void adminEnroll(Long studentId, Long courseId) {
@@ -240,11 +241,6 @@ public class EnrollService {
             throw new BusinessException(403, "无权限，仅教学秘书可操作");
         }
         enroll(studentId, courseId);
-        // 代选成功自动通知
-        Course course = courseMapper.selectById(courseId);
-        notificationService.sendSystem("ENROLL", "选课成功",
-                "「" + course.getCourseName() + "」选课成功（教学秘书代选），可在“我的课表”中查看。",
-                List.of(studentId));
     }
 
     /** 学生已选课程 ID 列表（用于选课中心标记） */
