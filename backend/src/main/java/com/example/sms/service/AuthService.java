@@ -50,7 +50,15 @@ public class AuthService {
      * 锁定键统一小写规范化，防止利用 MySQL 大小写不敏感排序规则以大小写变体绕过锁定。
      */
     public LoginResponse login(LoginDTO dto) {
-        String username = dto.getUsername().trim();
+        return guardedLogin(dto.getUsername().trim(), dto.getPassword());
+    }
+
+    /**
+     * 统一登录守卫（login 与 OAuth 绑定共用）：
+     * 锁定检查 → 账号限流 → 登录（校验密码与 ENABLED 状态）→ 成功清除失败计数 / 失败累计。
+     * 防止 OAuth 绑定成为暴力破解入口（Q-1）与冻结账号绕过（Q-2）。
+     */
+    private LoginResponse guardedLogin(String username, String password) {
         String lockKey = username.toLowerCase(Locale.ROOT);
         checkLoginLocked(lockKey);
         // 账号维度限流：单账号每分钟最多 LOGIN_RATE_LIMIT 次登录尝试（Redis 固定窗口）
@@ -58,7 +66,7 @@ public class AuthService {
             throw new BusinessException("登录尝试过于频繁，请稍后再试");
         }
         try {
-            LoginResponse resp = doLogin(username, dto.getPassword());
+            LoginResponse resp = doLogin(username, password);
             redis.delete(LOGIN_FAIL_KEY + lockKey);
             return resp;
         } catch (BusinessException e) {
@@ -151,23 +159,11 @@ public class AuthService {
     // ===== OAuth 登录复用：校验账号密码 / 按账号直接签发 =====
 
     /**
-     * 校验账号密码并签发（供 OAuth 绑定场景复用；不做失败锁定计数）。
+     * 校验账号密码并签发（供 OAuth 绑定场景复用）。
+     * 与 login 走同一登录守卫：锁定 + 限流 + ENABLED 状态校验，防止绑定接口被暴力破解 / 冻结账号绕过。
      */
     public LoginResponse verifyAndLogin(String username, String password) {
-        if (username.toUpperCase().startsWith("S") && !username.equalsIgnoreCase("admin")) {
-            Student s = studentMapper.selectOne(
-                    new LambdaQueryWrapper<Student>().eq(Student::getStudentNo, username));
-            if (s == null || !encoder.matches(password, s.getPasswordHash())) {
-                throw new BusinessException("学号或密码错误");
-            }
-            return buildStudentResponse(s);
-        }
-        Staff st = staffMapper.selectOne(
-                new LambdaQueryWrapper<Staff>().eq(Staff::getStaffNo, username));
-        if (st == null || !encoder.matches(password, st.getPasswordHash())) {
-            throw new BusinessException("工号或密码错误");
-        }
-        return buildStaffResponse(st);
+        return guardedLogin(username.trim(), password);
     }
 
     /**
