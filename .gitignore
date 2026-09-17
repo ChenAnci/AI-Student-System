@@ -31,6 +31,8 @@ verify_*.ps1
 verify_*.py
 *.tmp
 *.swp
+# Redis 本地持久化文件（运行产物，不入库）
+dump.rdb
 
 # --- 安全审查报告（含漏洞细节，不随源码发布） ---
 security_best_practices_report.md

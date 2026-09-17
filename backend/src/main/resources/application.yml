@@ -7,9 +7,10 @@ spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/student_management?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    # 数据库凭据通过环境变量注入（DB_USERNAME / DB_PASSWORD），默认值仅用于本地开发
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:root}
+    # 数据库凭据通过环境变量注入（DB_USERNAME / DB_PASSWORD），禁止在配置中硬编码 root 弱口令。
+    # 生产/开发请使用专用低权账号（见 sql/create_app_user.sql），本地开发可设 DB_USERNAME=root DB_PASSWORD=root。
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
   servlet:
     multipart:
       max-file-size: 10MB

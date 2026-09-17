@@ -8,9 +8,20 @@ CREATE DATABASE IF NOT EXISTS student_management DEFAULT CHARACTER SET utf8mb4 C
 USE student_management;
 
 -- ------------------------------------------------------------
+-- DROP 统一在开头且按"子表先删"逆序执行（外键约束要求先删引用方）
+-- ------------------------------------------------------------
+DROP TABLE IF EXISTS notification_receiver;
+DROP TABLE IF EXISTS notification;
+DROP TABLE IF EXISTS course_grade_audit;
+DROP TABLE IF EXISTS student_course;
+DROP TABLE IF EXISTS oauth_binding;
+DROP TABLE IF EXISTS course;
+DROP TABLE IF EXISTS student;
+DROP TABLE IF EXISTS staff;
+
+-- ------------------------------------------------------------
 -- 1. 教职工表 staff（教秘 ADMIN / 教师 TEACHER）
 -- ------------------------------------------------------------
-DROP TABLE IF EXISTS staff;
 CREATE TABLE staff (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     staff_no VARCHAR(20) NOT NULL UNIQUE COMMENT '工号（登录账号）',
@@ -18,6 +29,7 @@ CREATE TABLE staff (
     real_name VARCHAR(50) NOT NULL COMMENT '姓名',
     role_type VARCHAR(20) NOT NULL COMMENT 'ADMIN | TEACHER',
     status VARCHAR(20) DEFAULT 'ENABLED' COMMENT 'ENABLED | FROZEN',
+    token_version INT NOT NULL DEFAULT 1 COMMENT '令牌版本号，改密/禁用/改角色时+1，旧令牌即刻失效',
     department VARCHAR(50) COMMENT '所属院系',
     phone VARCHAR(20) COMMENT '手机号',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -27,13 +39,13 @@ CREATE TABLE staff (
 -- ------------------------------------------------------------
 -- 2. 学生表 student
 -- ------------------------------------------------------------
-DROP TABLE IF EXISTS student;
 CREATE TABLE student (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     student_no VARCHAR(20) NOT NULL UNIQUE COMMENT '学号（登录账号）',
     password_hash VARCHAR(255) NOT NULL COMMENT 'bcrypt加密密码',
     real_name VARCHAR(50) NOT NULL COMMENT '姓名',
     status VARCHAR(20) DEFAULT 'ENABLED' COMMENT 'ENABLED | FROZEN | SUSPENDED',
+    token_version INT NOT NULL DEFAULT 1 COMMENT '令牌版本号，改密/禁用/改角色时+1，旧令牌即刻失效',
     gender VARCHAR(10) COMMENT '男/女',
     phone VARCHAR(20) COMMENT '手机号',
     department VARCHAR(50) COMMENT '院系',
@@ -50,7 +62,6 @@ CREATE TABLE student (
 -- ------------------------------------------------------------
 -- 3. 课程表 course
 -- ------------------------------------------------------------
-DROP TABLE IF EXISTS course;
 CREATE TABLE course (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     course_code VARCHAR(20) NOT NULL UNIQUE COMMENT '课程编号',
@@ -66,13 +77,14 @@ CREATE TABLE course (
     status VARCHAR(20) DEFAULT 'UNPUBLISHED' COMMENT 'UNPUBLISHED未发布 | PUBLISHED已发布',
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_teacher (teacher_id),
-    KEY idx_status (status)
+    KEY idx_status (status),
+    -- F-1：外键约束兜底数据一致性（删除课程前必须先清理选课/成绩审核，否则数据库拒绝删除）
+    CONSTRAINT fk_course_teacher FOREIGN KEY (teacher_id) REFERENCES staff (id)
 ) COMMENT '课程表';
 
 -- ------------------------------------------------------------
 -- 4. 学生选课表 student_course
 -- ------------------------------------------------------------
-DROP TABLE IF EXISTS student_course;
 CREATE TABLE student_course (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     student_id BIGINT NOT NULL COMMENT '关联student.id',
@@ -82,13 +94,15 @@ CREATE TABLE student_course (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uk_student_course (student_id, course_id),
-    KEY idx_course_id (course_id)
+    KEY idx_course_id (course_id),
+    -- F-1：选课记录必须引用真实存在的学生与课程；学生/课程删除时由应用层先行清理，外键兜底
+    CONSTRAINT fk_sc_student FOREIGN KEY (student_id) REFERENCES student (id),
+    CONSTRAINT fk_sc_course FOREIGN KEY (course_id) REFERENCES course (id)
 ) COMMENT '学生选课表';
 
 -- ------------------------------------------------------------
 -- 5. 课程成绩审核表 course_grade_audit
 -- ------------------------------------------------------------
-DROP TABLE IF EXISTS course_grade_audit;
 CREATE TABLE course_grade_audit (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     course_id BIGINT NOT NULL UNIQUE COMMENT '课程ID',
@@ -101,8 +115,61 @@ CREATE TABLE course_grade_audit (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_course_id (course_id),
-    KEY idx_status (status)
+    KEY idx_status (status),
+    -- F-1：审核记录引用真实存在的课程与教师
+    CONSTRAINT fk_audit_course FOREIGN KEY (course_id) REFERENCES course (id),
+    CONSTRAINT fk_audit_teacher FOREIGN KEY (teacher_id) REFERENCES staff (id)
 ) COMMENT '课程成绩审核表';
+
+-- ------------------------------------------------------------
+-- 6. 站内通知主表 notification
+-- ------------------------------------------------------------
+DROP TABLE IF EXISTS notification;
+CREATE TABLE notification (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    type VARCHAR(20) NOT NULL COMMENT 'MANUAL | GRADE_PUBLISH | COURSE_CHANGE | ENROLL',
+    title VARCHAR(100) NOT NULL,
+    content VARCHAR(2000) NOT NULL,
+    sender_type VARCHAR(10) NOT NULL COMMENT 'ADMIN | TEACHER | SYSTEM',
+    sender_id BIGINT DEFAULT NULL COMMENT '发送者id（系统通知为null）',
+    sender_name VARCHAR(50) DEFAULT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_notification_created (created_at)
+) COMMENT '站内通知主表';
+
+-- ------------------------------------------------------------
+-- 7. 通知接收明细 notification_receiver
+-- ------------------------------------------------------------
+DROP TABLE IF EXISTS notification_receiver;
+CREATE TABLE notification_receiver (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    notification_id BIGINT NOT NULL COMMENT '所属通知（主表id）',
+    student_id BIGINT NOT NULL COMMENT '接收学生id',
+    is_read TINYINT NOT NULL DEFAULT 0 COMMENT '0未读 1已读',
+    read_at DATETIME DEFAULT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_receiver_student (student_id, is_read),
+    KEY idx_receiver_notification (notification_id),
+    -- F-1：接收明细引用真实存在的通知与学生
+    CONSTRAINT fk_nr_notification FOREIGN KEY (notification_id) REFERENCES notification (id),
+    CONSTRAINT fk_nr_student FOREIGN KEY (student_id) REFERENCES student (id)
+) COMMENT '通知接收明细';
+
+-- ------------------------------------------------------------
+-- 8. OAuth 绑定表 oauth_binding
+-- ------------------------------------------------------------
+CREATE TABLE oauth_binding (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_no VARCHAR(20) NOT NULL COMMENT '系统账号（工号/学号，对应 staff.staff_no / student.student_no）',
+    provider VARCHAR(20) NOT NULL COMMENT 'OAuth 提供方：github',
+    provider_uid VARCHAR(64) NOT NULL COMMENT 'GitHub 用户唯一 id',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    -- 唯一索引：同一 GitHub uid 只能绑定一个系统账号（防重复绑定竞态，S-9）；
+    -- 同一系统账号对同一提供方也只能有一条绑定关系
+    UNIQUE KEY uk_provider_uid (provider, provider_uid),
+    UNIQUE KEY uk_user_provider (user_no, provider)
+) COMMENT 'OAuth 登录绑定关系表';
 
 -- ============================================================
 -- 初始数据（密码统一 123456）
