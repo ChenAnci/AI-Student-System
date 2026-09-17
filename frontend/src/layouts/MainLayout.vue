@@ -28,6 +28,7 @@
           <NotificationBell v-if="isStudent" />
           <el-tag size="small" :type="roleTagType" effect="dark">{{ roleLabel }}</el-tag>
           <span class="username">{{ userStore.displayName() }}</span>
+          <el-button type="primary" link @click="openPasswordDialog">修改密码</el-button>
           <el-button type="danger" link @click="handleLogout">退出登录</el-button>
         </div>
       </el-header>
@@ -35,16 +36,35 @@
         <router-view />
       </el-main>
     </el-container>
+
+    <el-dialog v-model="passwordDialogVisible" title="修改密码" width="420px" :close-on-click-modal="false">
+      <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-width="90px">
+        <el-form-item label="旧密码" prop="oldPassword">
+          <el-input v-model="passwordForm.oldPassword" type="password" show-password placeholder="请输入当前密码" />
+        </el-form-item>
+        <el-form-item label="新密码" prop="newPassword">
+          <el-input v-model="passwordForm.newPassword" type="password" show-password placeholder="8~20 位，含字母和数字" />
+        </el-form-item>
+        <el-form-item label="确认新密码" prop="confirmPassword">
+          <el-input v-model="passwordForm.confirmPassword" type="password" show-password placeholder="再次输入新密码" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="passwordDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="passwordSubmitting" @click="submitPassword">确定</el-button>
+      </template>
+    </el-dialog>
   </el-container>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import NotificationBell from '@/components/NotificationBell.vue'
 import { useNotificationStore } from '@/stores/notification'
+import { changePassword } from '@/api/account'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -125,6 +145,86 @@ function handleLogout() {
   ElMessageBox.confirm('确定退出登录吗？', '提示', { type: 'warning' }).then(() => {
     userStore.logout()
     router.push('/login')
+  })
+}
+
+// ==================== 修改密码 ====================
+
+const passwordDialogVisible = ref(false)
+const passwordSubmitting = ref(false)
+const passwordFormRef = ref<FormInstance>()
+const passwordForm = reactive({
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+})
+
+// 前端校验规则与后端 DTO 保持一致（8~20 位且同时包含字母和数字），并做二次确认一致性校验
+const passwordRules: FormRules = {
+  oldPassword: [{ required: true, message: '请输入旧密码', trigger: 'blur' }],
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 8, max: 20, message: '新密码长度需为 8~20 位', trigger: 'blur' },
+    {
+      pattern: /^(?=.*[A-Za-z])(?=.*\d).+$/,
+      message: '新密码需同时包含字母和数字',
+      trigger: 'blur'
+    },
+    {
+      validator: (_rule, value: string, callback) => {
+        if (value && value === passwordForm.oldPassword) {
+          callback(new Error('新密码不能与旧密码相同'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'blur'
+    }
+  ],
+  confirmPassword: [
+    { required: true, message: '请再次输入新密码', trigger: 'blur' },
+    {
+      validator: (_rule, value: string, callback) => {
+        if (value !== passwordForm.newPassword) {
+          callback(new Error('两次输入的新密码不一致'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'blur'
+    }
+  ]
+}
+
+function openPasswordDialog() {
+  passwordForm.oldPassword = ''
+  passwordForm.newPassword = ''
+  passwordForm.confirmPassword = ''
+  passwordDialogVisible.value = true
+}
+
+// 提交修改：前端校验通过后调用后端；成功则清空登录态要求重新登录（旧 token 中不含新密码，且改密后重新登录更安全）
+async function submitPassword() {
+  const form = passwordFormRef.value
+  if (!form) return
+  await form.validate(async (valid) => {
+    if (!valid) return
+    passwordSubmitting.value = true
+    try {
+      await changePassword({
+        oldPassword: passwordForm.oldPassword,
+        newPassword: passwordForm.newPassword
+      })
+      ElMessage.success('密码修改成功，请重新登录')
+      passwordDialogVisible.value = false
+      userStore.logout()
+      router.push('/login')
+    } catch (e) {
+      // 业务错误（旧密码错误/强度不足等）由 http 层统一弹出提示，此处静默
+      console.error('修改密码失败', e)
+    } finally {
+      passwordSubmitting.value = false
+    }
   })
 }
 </script>

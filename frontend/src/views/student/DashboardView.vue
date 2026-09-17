@@ -113,6 +113,7 @@ import type { EChartsOption } from 'echarts'
 import { dashboard as getDashboard } from '@/api/grade'
 import EChart from '@/components/EChart.vue'
 import type { DashboardData, GradeVO } from '@/types'
+import { escapeHtml } from '@/utils/escape'
 
 const loading = ref(false)
 const data = ref<DashboardData>({} as DashboardData)
@@ -148,7 +149,10 @@ const bandOption = computed<EChartsOption>(() => {
     else counts[4]++
   })
   return {
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: '{b}<br/>课程数：{c}' },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (params: unknown) => {
+      const p = Array.isArray(params) ? params[0] : params
+      return `${escapeHtml(p?.name ?? '')}<br/>课程数：${escapeHtml(p?.value ?? '')}`
+    } },
     grid: { left: 10, right: 20, top: 30, bottom: 10, containLabel: true },
     xAxis: { type: 'category', data: bands },
     yAxis: { type: 'value', minInterval: 1 },
@@ -167,7 +171,11 @@ const bandOption = computed<EChartsOption>(() => {
 const courseOption = computed<EChartsOption>(() => {
   const rows = publishedGrades.value
   return {
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: '{b}<br/>成绩：{c} 分' },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (params: unknown) => {
+      const p = Array.isArray(params) ? params[0] : params
+      // courseName 来自数据库，转义防存储型 XSS（S-8）
+      return `${escapeHtml(p?.name ?? '')}<br/>成绩：${escapeHtml(p?.value ?? '')} 分`
+    } },
     grid: { left: 10, right: 20, top: 30, bottom: 10, containLabel: true },
     xAxis: { type: 'category', data: rows.map((g) => g.courseName), axisLabel: { interval: 0, rotate: rows.length > 4 ? 25 : 0 } },
     yAxis: { type: 'value', min: 0, max: 100 },

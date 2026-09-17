@@ -50,6 +50,16 @@ export function resetPassword(userType: 'STAFF' | 'STUDENT', id: number) {
   return http.put(`/accounts/${userType}/${id}/password`) as Promise<null>
 }
 
+/** 修改本人密码（学生/教师/管理员通用） */
+export interface ChangePasswordForm {
+  oldPassword: string
+  newPassword: string
+}
+
+export function changePassword(data: ChangePasswordForm) {
+  return http.put('/accounts/me/password', data) as Promise<null>
+}
+
 export function toggleStatus(userType: 'STAFF' | 'STUDENT', id: number, status: string) {
   return http.put(`/accounts/${userType}/${id}/status`, null, { params: { status } }) as Promise<null>
 }

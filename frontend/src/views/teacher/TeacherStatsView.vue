@@ -82,6 +82,7 @@ import type { EChartsOption } from 'echarts'
 import { getTeacherStats } from '@/api/stats'
 import EChart from '@/components/EChart.vue'
 import type { TeacherStats } from '@/types'
+import { escapeHtml } from '@/utils/escape'
 
 const loading = ref(false)
 const data = ref<TeacherStats>({} as TeacherStats)
@@ -101,7 +102,13 @@ const avgScore = computed(() => {
 const scoreOption = computed<EChartsOption>(() => {
   const rows = data.value.courseScores || []
   return {
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: '{b}<br/>平均分：{c}' },
+    // formatter 函数 + HTML 转义：课程名来自数据库，直接 {b} 插值会作为 HTML 渲染（存储型 XSS，S-8）
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (params: unknown) => {
+      const p = Array.isArray(params) ? params[0] : params
+      const name = p?.name ?? ''
+      const value = p?.value ?? ''
+      return `${escapeHtml(name)}<br/>平均分：${escapeHtml(value)}`
+    } },
     grid: { left: 10, right: 20, top: 30, bottom: 10, containLabel: true },
     xAxis: { type: 'category', data: rows.map((r) => r.courseName), axisLabel: { interval: 0, rotate: rows.length > 4 ? 25 : 0 } },
     yAxis: { type: 'value', min: 40, max: 100 },
@@ -120,7 +127,11 @@ const scoreOption = computed<EChartsOption>(() => {
 const bandOption = computed<EChartsOption>(() => {
   const items = data.value.scoreBands || []
   return {
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: '{b}<br/>人数：{c}' },
+    // scoreBands.name 由系统生成（分数段），但统一转义保持一致
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (params: unknown) => {
+      const p = Array.isArray(params) ? params[0] : params
+      return `${escapeHtml(p?.name ?? '')}<br/>人数：${escapeHtml(p?.value ?? '')}`
+    } },
     grid: { left: 10, right: 20, top: 30, bottom: 10, containLabel: true },
     xAxis: { type: 'category', data: items.map((it) => it.name) },
     yAxis: { type: 'value' },

@@ -51,6 +51,7 @@ import type { EChartsOption } from 'echarts'
 import { getAdminStats } from '@/api/stats'
 import EChart from '@/components/EChart.vue'
 import type { AdminStats, NameValue } from '@/types'
+import { escapeHtml } from '@/utils/escape'
 
 const loading = ref(false)
 const data = ref<AdminStats>({} as AdminStats)
@@ -67,7 +68,11 @@ const cards = computed(() => [
 
 function pieOption(items: NameValue[]): EChartsOption {
   return {
-    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    // item name 来自数据库（院系/专业/课程名），转义防存储型 XSS（S-8）
+    tooltip: { trigger: 'item', formatter: (params: unknown) => {
+      const p = params as { name?: unknown; value?: unknown; percent?: unknown } | undefined
+      return `${escapeHtml(p?.name ?? '')}: ${escapeHtml(p?.value ?? '')} (${escapeHtml(p?.percent ?? '')}%)`
+    } },
     legend: { orient: 'vertical', right: 4, top: 'center', type: 'scroll' },
     series: [
       {
