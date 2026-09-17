@@ -191,7 +191,18 @@ mysql -uroot -p < sql/create_app_user.sql   # 创建专用低权账号 sms_app�
 
 > 历史库升级（已存在数据时）：仅执行缺失的 `sql/oauth_binding.sql` / `sql/notifications.sql`（幂等 IF NOT EXISTS），并按需为 staff/student 补 `token_version` 列。
 
-### 2. 启动后端（8080）
+### 2. 启动 Redis（6379）
+
+```bash
+redis-server                                    # 已安装 / 已在 PATH 时
+# 便携版（本机无安装时）：直接运行解压目录中的 redis-server.exe，例如
+# C:\Users\ASUS\AppData\Local\Temp\redis-x64\redis-server.exe
+redis-cli ping                                  # 返回 PONG 即就绪
+```
+
+> Redis 用于登录失败锁定/限流、选课缓存、OAuth state 等。未启动时系统会**降级放行**（日志打 WARN，功能基本可用），但 **GitHub OAuth 依赖 Redis 存储 state**——启用 GitHub 登录前务必先启动 Redis。
+
+### 3. 启动后端（8080）
 
 ```bash
 cd backend
@@ -205,7 +216,7 @@ export GITHUB_CLIENT_SECRET='<GitHub OAuth App Client Secret>' # 可选：启用
 mvn spring-boot:run
 ```
 
-### 3. 启动 AI 服务（8000，仅本机监听）
+### 4. 启动 AI 服务（8000，仅本机监听）
 
 ```bash
 cd backend-ai
@@ -213,7 +224,7 @@ cp .env.example .env   # 必填 DEEPSEEK_API_KEY（对话模型）；选课建�
 python main.py
 ```
 
-### 4. 启动前端（5173）
+### 5. 启动前端（5173）
 
 ```bash
 cd frontend
@@ -237,6 +248,7 @@ npm run dev
 |---|---|---|
 | `JWT_SECRET` | JWT 签名密钥（≥32字符），**与 AI 服务共享** | 后端 / backend-ai/.env |
 | `DB_USERNAME` / `DB_PASSWORD` | 数据库专用低权账号（`sms_app`）凭据 | 后端启动时注入 |
+| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | Redis 连接（默认 `localhost:6379` 无密码） | 后端启动时注入 |
 | `CORS_ALLOWED_ORIGINS` | 前端域名白名单 | 后端启动时注入 |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth App 凭据（可选，启用 GitHub 登录） | 后端启动时注入 |
 | `GITHUB_REDIRECT_URI` | GitHub 授权回调地址（默认 `http://localhost:8080/api/oauth/github/callback`） | 后端启动时注入 |
