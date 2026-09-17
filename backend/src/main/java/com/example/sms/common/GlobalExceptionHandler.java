@@ -1,12 +1,15 @@
 package com.example.sms.common;
 
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.util.UUID;
 
 /**
  * 全局异常处理
@@ -38,9 +41,16 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public Result<Void> handleOther(Exception e) {
-        // 兜底异常：记录完整堆栈便于排查，但对外只返回通用提示 code=500，
+        // 兜底异常：生成 traceId 并在服务端日志中关联记录完整堆栈（L-1），
+        // 对外只返回通用提示 code=500 + traceId，便于用户反馈后快速定位，
         // 不把异常详情/堆栈暴露给客户端（防止泄露内部实现细节给攻击者）。
-        log.error("系统异常", e);
-        return Result.error(500, "系统繁忙，请稍后重试");
+        String traceId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        try {
+            MDC.put("traceId", traceId);
+            log.error("系统异常（traceId={}）", traceId, e);
+        } finally {
+            MDC.remove("traceId");
+        }
+        return Result.error(500, "系统繁忙，请稍后重试（traceId: " + traceId + "）");
     }
 }
