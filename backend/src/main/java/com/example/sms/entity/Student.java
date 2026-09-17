@@ -32,6 +32,9 @@ public class Student {
     /** ENABLED | FROZEN | SUSPENDED */
     private String status;
 
+    /** 令牌版本号：改密/禁用/改角色时 +1，用于吊销旧 token */
+    private Integer tokenVersion;
+
     /** 男/女 */
     private String gender;
 

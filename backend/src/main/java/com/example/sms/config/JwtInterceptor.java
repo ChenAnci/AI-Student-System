@@ -1,5 +1,9 @@
 package com.example.sms.config;
 
+import com.example.sms.entity.Staff;
+import com.example.sms.entity.Student;
+import com.example.sms.mapper.StaffMapper;
+import com.example.sms.mapper.StudentMapper;
 import com.example.sms.util.JwtUtil;
 import com.example.sms.util.UserContext;
 import io.jsonwebtoken.Claims;
@@ -20,6 +24,12 @@ public class JwtInterceptor implements HandlerInterceptor {
     @Autowired
     private JwtUtil jwtUtil;
 
+    @Autowired
+    private StaffMapper staffMapper;
+
+    @Autowired
+    private StudentMapper studentMapper;
+
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
 
     /**
@@ -28,6 +38,8 @@ public class JwtInterceptor implements HandlerInterceptor {
      * 同一路径下精确规则必须放在通配规则之前（如 /api/accounts/me 在 /api/accounts/** 前）。
      */
     private static final String[][] ROLE_RULES = {
+            // 自助修改密码：精确规则必须放在 /api/accounts/**（仅 ADMIN）之前，否则被通配拦截导致学生/教师无法改密
+            {"/api/accounts/me/password", "STUDENT,TEACHER,ADMIN"},
             {"/api/accounts/me", "STUDENT,TEACHER,ADMIN"},
             {"/api/accounts/**", "ADMIN"},
             {"/api/courses/my", "TEACHER,ADMIN"},
@@ -80,6 +92,14 @@ public class JwtInterceptor implements HandlerInterceptor {
             response.getWriter().write("{\"code\":401,\"message\":\"未登录或登录已过期\",\"data\":null}");
             return false;
         }
+        // 令牌版本号比对（吊销检查）：改密/禁用/改角色后 token_version +1，
+        // 旧 token 携带的版本号与数据库不一致即判定已吊销，立即返回 401 强制重新登录。
+        if (!tokenVersionValid(claims)) {
+            response.setStatus(401);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"code\":401,\"message\":\"登录状态已失效，请重新登录\",\"data\":null}");
+            return false;
+        }
         // 将当前登录用户写入 ThreadLocal（线程私有）：同一请求线程内的 Controller/Service 可直接
         // 通过 UserContext 取到 userId/role 等，避免层层透传参数；注意必须在 afterCompletion 中清理。
         UserContext.CurrentUser user = new UserContext.CurrentUser();
@@ -118,6 +138,26 @@ public class JwtInterceptor implements HandlerInterceptor {
         // 循环结束仍无任何规则命中：默认拒绝（fail-closed）。
         // 新增接口若忘记在 ROLE_RULES 登记，访问一律 403，宁可误伤也不放开（R-5）。
         return false;
+    }
+
+    /**
+     * 令牌版本号吊销检查：token 携带的版本号必须与数据库当前版本一致。
+     * 账号被禁用（FROZEN）时同样按吊销处理——旧 token 不再放行，需重新登录。
+     */
+    private boolean tokenVersionValid(Claims claims) {
+        Long userId = ((Number) claims.get("userId")).longValue();
+        String roleType = (String) claims.get("roleType");
+        int tokenVersion = jwtUtil.tokenVersion(claims);
+        // 按角色路由查库：学生查 student 表，教师/管理员查 staff 表
+        if ("STUDENT".equals(roleType)) {
+            Student student = studentMapper.selectById(userId);
+            if (student == null || !"ENABLED".equals(student.getStatus())) return false;
+            return Integer.valueOf(tokenVersion).equals(student.getTokenVersion());
+        } else {
+            Staff staff = staffMapper.selectById(userId);
+            if (staff == null || !"ENABLED".equals(staff.getStatus())) return false;
+            return Integer.valueOf(tokenVersion).equals(staff.getTokenVersion());
+        }
     }
 
     @Override

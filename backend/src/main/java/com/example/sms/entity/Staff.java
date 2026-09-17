@@ -34,6 +34,9 @@ public class Staff {
     /** ENABLED | FROZEN */
     private String status;
 
+    /** 令牌版本号：改密/禁用/改角色时 +1，用于吊销旧 token */
+    private Integer tokenVersion;
+
     /** 所属院系 */
     private String department;
 

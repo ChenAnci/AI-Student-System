@@ -127,21 +127,71 @@ public class AccountService {
         }
     }
 
-    /** 重置密码为 123456 */
+    /** 重置密码为 123456（重置后旧 token 全部失效：tokenVersion +1） */
     public void resetPassword(String userType, Long id) {
         checkAdmin();
         if ("STAFF".equals(userType)) {
             Staff staff = staffMapper.selectById(id);
             if (staff == null) throw new BusinessException("账号不存在");
             staff.setPasswordHash(encoder.encode("123456"));
+            staff.setTokenVersion(nextTokenVersion(staff.getTokenVersion()));
             staffMapper.updateById(staff);
         } else if ("STUDENT".equals(userType)) {
             Student student = studentMapper.selectById(id);
             if (student == null) throw new BusinessException("账号不存在");
             student.setPasswordHash(encoder.encode("123456"));
+            student.setTokenVersion(nextTokenVersion(student.getTokenVersion()));
             studentMapper.updateById(student);
         } else {
             throw new BusinessException("非法账号类型");
+        }
+    }
+
+    /** token 版本号递增（null 视为 0）：改密/重置/禁用后使旧 token 失效 */
+    private Integer nextTokenVersion(Integer v) {
+        return (v == null ? 0 : v) + 1;
+    }
+
+    /**
+     * 自助修改本人密码：校验旧密码后更新为新密码密文，并递增 token 版本号吊销旧 token。
+     * 学生/教师/管理员均可调用；admin 走教职工表（与登录路由一致）。
+     */
+    @Transactional
+    public void changePassword(String oldPassword, String newPassword) {
+        Long userId = UserContext.getUserId();
+        String role = UserContext.getRole();
+        if (userId == null) {
+            throw new BusinessException("未登录或登录已过期");
+        }
+        // 新密码强度校验（与 DTO 注解一致，服务层兜底防绕过前端/接口层校验）
+        if (newPassword == null || newPassword.length() < 8 || newPassword.length() > 20
+                || !newPassword.matches("^(?=.*[A-Za-z])(?=.*\\d).+$")) {
+            throw new BusinessException("新密码需为 8~20 位且同时包含字母和数字");
+        }
+        if ("STUDENT".equals(role)) {
+            Student student = studentMapper.selectById(userId);
+            if (student == null) throw new BusinessException("账号不存在");
+            if (!encoder.matches(oldPassword, student.getPasswordHash())) {
+                throw new BusinessException("旧密码错误");
+            }
+            if (encoder.matches(newPassword, student.getPasswordHash())) {
+                throw new BusinessException("新密码不能与旧密码相同");
+            }
+            student.setPasswordHash(encoder.encode(newPassword));
+            student.setTokenVersion(nextTokenVersion(student.getTokenVersion()));
+            studentMapper.updateById(student);
+        } else {
+            Staff staff = staffMapper.selectById(userId);
+            if (staff == null) throw new BusinessException("账号不存在");
+            if (!encoder.matches(oldPassword, staff.getPasswordHash())) {
+                throw new BusinessException("旧密码错误");
+            }
+            if (encoder.matches(newPassword, staff.getPasswordHash())) {
+                throw new BusinessException("新密码不能与旧密码相同");
+            }
+            staff.setPasswordHash(encoder.encode(newPassword));
+            staff.setTokenVersion(nextTokenVersion(staff.getTokenVersion()));
+            staffMapper.updateById(staff);
         }
     }
 
@@ -173,7 +223,7 @@ public class AccountService {
         }
     }
 
-    /** 冻结/启用账号 */
+    /** 冻结/启用账号（状态变更后递增 token 版本号，吊销该账号所有旧 token） */
     public void toggleStatus(String userType, Long id, String status) {
         checkAdmin();
         // 账号状态机：ENABLED(正常)/FROZEN(冻结，不可登录与选课)/SUSPENDED(休学，不可选课)；
@@ -185,11 +235,13 @@ public class AccountService {
             Staff staff = staffMapper.selectById(id);
             if (staff == null) throw new BusinessException("账号不存在");
             staff.setStatus(status);
+            staff.setTokenVersion(nextTokenVersion(staff.getTokenVersion()));
             staffMapper.updateById(staff);
         } else if ("STUDENT".equals(userType)) {
             Student student = studentMapper.selectById(id);
             if (student == null) throw new BusinessException("账号不存在");
             student.setStatus(status);
+            student.setTokenVersion(nextTokenVersion(student.getTokenVersion()));
             studentMapper.updateById(student);
         } else {
             throw new BusinessException("非法账号类型");

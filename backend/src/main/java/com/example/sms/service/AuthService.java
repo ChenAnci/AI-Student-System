@@ -159,8 +159,9 @@ public class AuthService {
                 new LambdaQueryWrapper<Staff>().eq(Staff::getStaffNo, staffNo));
         // 先校验密码再校验状态：账号不存在与密码错误返回同一提示，避免攻击者通过报错差异枚举有效工号；
         // BCrypt 每次比对耗时稳定，也能平摊时序差异，增加爆破成本。
+        // 文案与学号登录统一为中性提示（L-2）：不因账号类型（工号/学号）暴露差异，彻底消除用户枚举面。
         if (staff == null || !encoder.matches(password, staff.getPasswordHash())) {
-            throw new BusinessException("工号或密码错误");
+            throw new BusinessException("账号或密码错误");
         }
         // 账号状态校验：被停用/冻结的账号一律拒绝登录（含 OAuth 绑定签发路径，见 issueByUserNo/verifyAndLogin）
         if (!"ENABLED".equals(staff.getStatus())) {
@@ -173,7 +174,7 @@ public class AuthService {
         resp.setRoleType(staff.getRoleType());
         resp.setDepartment(staff.getDepartment());
         resp.setToken(jwtUtil.generateToken(staff.getId(), staff.getStaffNo(),
-                staff.getRealName(), staff.getRoleType()));
+                staff.getRealName(), staff.getRoleType(), staff.getTokenVersion()));
         return resp;
     }
 
@@ -182,7 +183,7 @@ public class AuthService {
                 new LambdaQueryWrapper<Student>().eq(Student::getStudentNo, studentNo));
         // 与教职工登录同一策略：不存在与密码错误同提示（防学号枚举），密码比对用 BCrypt
         if (student == null || !encoder.matches(password, student.getPasswordHash())) {
-            throw new BusinessException("学号或密码错误");
+            throw new BusinessException("账号或密码错误");
         }
         // 停用/冻结账号拒绝登录
         if (!"ENABLED".equals(student.getStatus())) {
@@ -197,7 +198,7 @@ public class AuthService {
         resp.setMajor(student.getMajor());
         resp.setClassName(student.getClassName());
         resp.setToken(jwtUtil.generateToken(student.getId(), student.getStudentNo(),
-                student.getRealName(), "STUDENT"));
+                student.getRealName(), "STUDENT", student.getTokenVersion()));
         return resp;
     }
 
@@ -239,7 +240,7 @@ public class AuthService {
         resp.setRoleType(staff.getRoleType());
         resp.setDepartment(staff.getDepartment());
         resp.setToken(jwtUtil.generateToken(staff.getId(), staff.getStaffNo(),
-                staff.getRealName(), staff.getRoleType()));
+                staff.getRealName(), staff.getRoleType(), staff.getTokenVersion()));
         return resp;
     }
 
@@ -253,7 +254,7 @@ public class AuthService {
         resp.setMajor(student.getMajor());
         resp.setClassName(student.getClassName());
         resp.setToken(jwtUtil.generateToken(student.getId(), student.getStudentNo(),
-                student.getRealName(), "STUDENT"));
+                student.getRealName(), "STUDENT", student.getTokenVersion()));
         return resp;
     }
 }

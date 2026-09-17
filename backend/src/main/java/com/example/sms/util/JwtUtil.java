@@ -48,12 +48,13 @@ public class JwtUtil {
     /**
      * 生成 Token
      *
-     * @param userId   用户ID
-     * @param userNo   工号/学号
-     * @param realName 姓名
-     * @param roleType 角色 ADMIN / TEACHER / STUDENT
+     * @param userId       用户ID
+     * @param userNo       工号/学号
+     * @param realName     姓名
+     * @param roleType     角色 ADMIN / TEACHER / STUDENT
+     * @param tokenVersion 令牌版本号（改密/禁用/改角色时 +1，用于吊销旧 token）
      */
-    public String generateToken(Long userId, String userNo, String realName, String roleType) {
+    public String generateToken(Long userId, String userNo, String realName, String roleType, Integer tokenVersion) {
         // Token 内只放身份与角色等非敏感声明，供拦截器/接口直接使用，避免每次查库；
         // 不放入密码、邮箱等敏感字段，降低 Token 泄露时的信息暴露面。
         Map<String, Object> claims = new HashMap<>();
@@ -61,6 +62,8 @@ public class JwtUtil {
         claims.put("userNo", userNo);
         claims.put("realName", realName);
         claims.put("roleType", roleType);
+        // 令牌版本号：签发时写入当前版本，验签时与数据库比对；版本不一致（改密/禁用/改角色后）即视为已吊销
+        claims.put("tokenVersion", tokenVersion != null ? tokenVersion : 1);
         Date now = new Date();
         // 过期时间由配置（jwt.expire-hours）控制：过期后 Token 失效，强制重新登录
         Date expiry = new Date(now.getTime() + expireHours * 3600 * 1000L);
@@ -85,5 +88,13 @@ public class JwtUtil {
             // 既不向攻击者暴露签名校验细节，也避免异常穿透到全局处理器造成 500。
             return null;
         }
+    }
+
+    /**
+     * 从已解析的 Claims 中提取令牌版本号（缺失/非法时返回 1，与签发默认值一致）
+     */
+    public int tokenVersion(Claims claims) {
+        Object v = claims.get("tokenVersion");
+        return v instanceof Number ? ((Number) v).intValue() : 1;
     }
 }

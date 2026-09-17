@@ -3,6 +3,7 @@ package com.example.sms.controller;
 import com.example.sms.common.Result;
 import com.example.sms.dto.AccountCreateDTO;
 import com.example.sms.dto.AccountUpdateDTO;
+import com.example.sms.dto.ChangePasswordDTO;
 import com.example.sms.entity.Staff;
 import com.example.sms.entity.Student;
 import com.example.sms.service.AccountService;
@@ -82,6 +83,13 @@ public class AccountController {
     @GetMapping("/me")
     public Result<Object> myInfo() {
         return Result.success(accountService.myInfo());
+    }
+
+    @ApiOperation("修改本人密码（学生/教师/管理员通用）")
+    @PutMapping("/me/password")
+    public Result<Void> changePassword(@Valid @RequestBody ChangePasswordDTO dto) {
+        accountService.changePassword(dto.getOldPassword(), dto.getNewPassword());
+        return Result.success();
     }
 
     @ApiOperation("导出学生列表 Excel")
