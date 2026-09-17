@@ -461,11 +461,14 @@ public class GradeService {
             vo.setCourseId(sc.getCourseId());
             vo.setCourseName(c != null ? c.getCourseName() : "未知课程");
             vo.setCredit(c != null ? c.getCredit() : BigDecimal.ZERO);
-            vo.setScore(sc.getScore());
-            vo.setMark(sc.getMark());
             String auditStatus = auditMap.get(sc.getCourseId());
             vo.setAuditStatus(auditStatus);
             boolean published = "PUBLISHED".equals(auditStatus);
+            // 未发布的成绩不向学生泄露：分数/mark 只在已发布后返回，绩点与是否通过随之置空
+            if (published) {
+                vo.setScore(sc.getScore());
+                vo.setMark(sc.getMark());
+            }
             vo.setPassed(published && sc.getScore() != null
                     && sc.getScore().compareTo(new BigDecimal("60")) >= 0
                     && "NORMAL".equals(sc.getMark()));

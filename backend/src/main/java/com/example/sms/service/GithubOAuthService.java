@@ -119,7 +119,7 @@ public class GithubOAuthService {
         }
         // 防一码多用：该 GitHub uid 必须尚未绑定其他账号。
         // 若不检查，同一 GitHub 账号可被反复绑定到不同系统账号，造成账号归属混乱与越权风险；
-        // 绑定关系一旦建立，后续登录一律按第一条绑定记录签发（见 handleCallback 中 findBinding 取第一条）。
+        // 绑定关系一旦建立，后续登录一律按该条绑定记录签发（见 handleCallback 中 findBinding）。
         if (findBinding(PROVIDER, providerUid) != null) {
             throw new BusinessException("该 GitHub 账号已绑定其他账号，请直接登录");
         }
@@ -130,7 +130,14 @@ public class GithubOAuthService {
         b.setUserNo(resp.getUserNo());
         b.setProvider(PROVIDER);
         b.setProviderUid(providerUid);
-        bindingMapper.insert(b);
+        try {
+            bindingMapper.insert(b);
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            // 并发/重试下唯一索引（uk_provider_uid / uk_user_provider）兜底：
+            // 两个请求同时通过 findBinding 检查后都走到 insert，后到者撞唯一键，
+            // 这里转成明确的业务提示而非 500，避免竞态暴露为服务端错误。
+            throw new BusinessException("该 GitHub 账号或系统账号已存在绑定关系，请直接登录");
+        }
         return resp;
     }
 
@@ -169,9 +176,12 @@ public class GithubOAuthService {
     }
 
     private OAuthBinding findBinding(String provider, String uid) {
+        // LIMIT 1 显式取第一条：配合数据库唯一索引（uk_provider_uid），正常数据只有一条；
+        // 即使历史遗留脏数据存在多条，也按"第一条"稳定签发，避免 selectOne 在多于一条时抛异常。
         return bindingMapper.selectOne(new LambdaQueryWrapper<OAuthBinding>()
                 .eq(OAuthBinding::getProvider, provider)
-                .eq(OAuthBinding::getProviderUid, uid));
+                .eq(OAuthBinding::getProviderUid, uid)
+                .last("LIMIT 1"));
     }
 
     private String exchangeToken(String code) {

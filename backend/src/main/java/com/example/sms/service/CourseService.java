@@ -149,6 +149,10 @@ public class CourseService {
         if (enrolled > 0) {
             throw new BusinessException("该课程已有学生选课，不可删除");
         }
+        // 事务内显式级联清理（F-1）：删除课程的草稿成绩审核记录，避免外键约束（fk_audit_course）阻止删除。
+        // 未发布课程虽不能正式录成绩，但可能留有 DRAFT 状态的审核行，须一并清除保证删除路径通畅。
+        auditMapper.delete(new LambdaQueryWrapper<CourseGradeAudit>()
+                .eq(CourseGradeAudit::getCourseId, id));
         courseMapper.deleteById(course.getId());
     }
 

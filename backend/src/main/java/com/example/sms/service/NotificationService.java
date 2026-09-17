@@ -99,15 +99,17 @@ public class NotificationService {
         n.setSenderName(senderName);
         notificationMapper.insert(n);
 
-        // 2) 写接收明细（一人一条）：先 distinct 去重，避免同一学生命中多种接收方式（如既在班级又在课程）产生重复通知
+        // 2) 写接收明细（一人一条）：先 distinct 去重，避免同一学生命中多种接收方式（如既在班级又在课程）产生重复通知；
+        //    批量 INSERT（F-3）：一次拼接多行 VALUES 替代逐条 insert，群发数百人时避免 N+1 写放大
         List<Long> distinctIds = studentIds.stream().distinct().collect(Collectors.toList());
-        for (Long sid : distinctIds) {
+        List<NotificationReceiver> receivers = distinctIds.stream().map(sid -> {
             NotificationReceiver r = new NotificationReceiver();
             r.setNotificationId(n.getId());
             r.setStudentId(sid);
             r.setIsRead(false);
-            receiverMapper.insert(r);
-        }
+            return r;
+        }).collect(Collectors.toList());
+        receiverMapper.batchInsert(receivers);
 
         // 事务提交后推送（保证落库可见后再通知前端）
         // 为什么必须提交后再推：若在事务内推送，接收方此刻查询收件箱尚看不到记录，会产生"收到推送但列表为空"的窗口期；
