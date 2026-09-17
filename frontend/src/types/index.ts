@@ -129,6 +129,8 @@ export interface GradeVO {
   mark: string
   auditStatus: string
   passed: boolean
+  /** 单科绩点（已发布且有成绩时返回，否则 null） */
+  gradePoint?: number | null
 }
 
 export interface DashboardData {

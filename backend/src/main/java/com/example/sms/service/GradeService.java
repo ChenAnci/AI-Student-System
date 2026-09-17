@@ -465,9 +465,13 @@ public class GradeService {
             vo.setMark(sc.getMark());
             String auditStatus = auditMap.get(sc.getCourseId());
             vo.setAuditStatus(auditStatus);
-            vo.setPassed("PUBLISHED".equals(auditStatus) && sc.getScore() != null
+            boolean published = "PUBLISHED".equals(auditStatus);
+            vo.setPassed(published && sc.getScore() != null
                     && sc.getScore().compareTo(new BigDecimal("60")) >= 0
                     && "NORMAL".equals(sc.getMark()));
+            // 单科绩点：仅已发布且已有成绩时展示（未发布成绩不向学生泄露绩点）
+            vo.setGradePoint(published && sc.getScore() != null
+                    ? toGradePoint(sc.getScore()) : null);
             return vo;
         }).collect(Collectors.toList());
     }

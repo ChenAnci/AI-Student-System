@@ -20,4 +20,6 @@ public class GradeVO {
     private String auditStatus;
     /** 是否通过（已发布且 score >= 60） */
     private Boolean passed;
+    /** 单科绩点：已发布且有成绩时 = toGradePoint(score)，未发布/无成绩为 null */
+    private BigDecimal gradePoint;
 }
