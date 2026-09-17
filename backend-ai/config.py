@@ -24,7 +24,8 @@ class Settings(BaseSettings):
     # ---- MySQL（只读）----
     mysql_host: str = "localhost"
     mysql_port: int = 3306
-    mysql_user: str = "root"
+    # 专用低权账号（见 sql/create_app_user.sql），禁止 root 直连；用户名可用 MYSQL_USER 覆盖
+    mysql_user: str = "sms_app"
     # 密码必须从 .env 注入（默认留空，未配置则拒绝启动，避免弱默认凭据）
     mysql_password: str = ""
     mysql_db: str = "student_management"
@@ -44,10 +45,15 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# fail-fast：数据库密码与 DeepSeek 官方 Key 必须显式配置（.env），禁止空/弱默认值静默启动
+# fail-fast：数据库密码、DeepSeek 官方 Key 与 JWT 共享密钥必须显式配置（.env / 环境变量），禁止空/弱默认值静默启动
 # 启动即校验关键凭据：与其带着空密码/空 Key 跑起来、运行时才报一堆晦涩错误，
 # 不如进程一启动就明确失败，逼迫运维显式配置凭据（避免弱默认凭据上线）。
 if not settings.mysql_password:
     raise RuntimeError("MYSQL_PASSWORD 未配置：请在 backend-ai/.env 中设置数据库密码（禁止弱默认凭据启动）")
 if not settings.deepseek_api_key:
     raise RuntimeError("DEEPSEEK_API_KEY 未配置：请在 backend-ai/.env 中设置 DeepSeek 官方 API Key")
+if not settings.jwt_secret:
+    # S-7：JWT 密钥与 Spring 后端共享（环境变量 JWT_SECRET），必须显式配置。
+    # 缺失时 AI 服务将拒绝一切请求（verify_jwt 对空密钥恒返回 None），
+    # 但提前在此失败可让运维立即发现配置遗漏，而不是上线后所有调用 401。
+    raise RuntimeError("JWT_SECRET 未配置：请在 backend-ai/.env 中设置与 Spring 后端一致的 JWT_SECRET")

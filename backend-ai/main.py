@@ -13,7 +13,8 @@ import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 import vectorstore
 from config import settings
@@ -57,6 +58,46 @@ async def security_headers_middleware(request, call_next):
     response.headers.setdefault("Referrer-Policy", "no-referrer")
     response.headers.setdefault("Cache-Control", "no-store")
     return response
+
+
+# 请求体上限（与 Spring 端 /api/ai/chat 的 64KB 限制对齐）：超限直接 413 拒绝，防内存 DoS
+MAX_BODY_BYTES = 64 * 1024
+
+
+@app.middleware("http")
+async def body_size_limit_middleware(request: Request, call_next):
+    """限制 /api/chat 请求体大小：防止超大 body 全量读入内存造成 DoS（H-2/S-4）。
+
+    仅对聊天接口启用（健康检查等无需限制）。实现上优先用 Content-Length 头预检，
+    未携带（如 chunked 传输）时按流式读取截断，读取超限即终止并返回 413。
+    """
+    if request.method != "POST" or request.url.path != "/api/chat":
+        return await call_next(request)
+
+    # 1) Content-Length 预检：声明长度超限直接拒绝，不读 body
+    content_length = request.headers.get("content-length")
+    if content_length and content_length.isdigit() and int(content_length) > MAX_BODY_BYTES:
+        return JSONResponse(status_code=413, content={"detail": "请求体过大，最大 64KB"})
+
+    # 2) 流式读取并截断：无 Content-Length（chunked）或声明值不可信时按实际字节数限制，
+    #    读取到上限即终止并 413，避免 FastAPI 把整个 body 读入内存后再解析（内存 DoS 向量）。
+    received = bytearray()
+    try:
+        async for chunk in request.stream():
+            received.extend(chunk)
+            if len(received) > MAX_BODY_BYTES:
+                return JSONResponse(status_code=413, content={"detail": "请求体过大，最大 64KB"})
+    except Exception:
+        # 读取异常（连接中断等）按请求体错误处理，不进入业务逻辑
+        return JSONResponse(status_code=400, content={"detail": "请求体读取失败"})
+
+    # 3) 把已读的 body 放回请求对象，供后续 Pydantic 解析使用
+    async def replay_body():
+        yield {"type": "http.request", "body": bytes(received), "more_body": False}
+
+    request._stream_consumed = True
+    request._body = bytes(received)
+    return await call_next(request)
 
 
 @app.get("/health")
