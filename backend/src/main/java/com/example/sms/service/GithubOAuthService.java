@@ -22,6 +22,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -66,6 +67,19 @@ public class GithubOAuthService {
     private final HttpClient http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
     private final ObjectMapper mapper = new ObjectMapper();
     private final SecureRandom random = new SecureRandom();
+
+    /** Redis 不可用时的内存降级存储（与登录锁定/限流一致的"降级放行"策略）：
+     *  仅保证单实例场景 OAuth 流程可用；生产多实例务必保证 Redis 可用。 */
+    private final ConcurrentHashMap<String, MemEntry> memCache = new ConcurrentHashMap<>();
+
+    private static final class MemEntry {
+        final String value;
+        final long expireAt;
+        MemEntry(String value, long ttlSeconds) {
+            this.value = value;
+            this.expireAt = System.currentTimeMillis() + ttlSeconds * 1000;
+        }
+    }
 
     /** 1. 生成 GitHub 授权跳转地址（未配置时抛业务提示） */
     public String buildAuthorizeUrl() {
@@ -143,31 +157,28 @@ public class GithubOAuthService {
 
     // ===== 内部工具 =====
 
-    /** 生成一次性授权码并缓存登录态（Redis 短 TTL），回调 URL 不携带 JWT（Q-5） */
+    /** 生成一次性授权码并缓存登录态（Redis 短 TTL，不可用则降级内存），回调 URL 不携带 JWT（Q-5） */
     private String issueAuthCode(LoginResponse resp) {
         String code = genState();
         try {
-            redis.opsForValue().set(AUTH_CODE_KEY + code, mapper.writeValueAsString(resp),
-                    AUTH_CODE_TTL_SECONDS, TimeUnit.SECONDS);
+            cacheSet(AUTH_CODE_KEY + code, mapper.writeValueAsString(resp), AUTH_CODE_TTL_SECONDS);
         } catch (JsonProcessingException e) {
             throw new BusinessException("登录态生成失败，请重新登录");
         }
         return code;
     }
 
-    /** 用一次性授权码换取登录态（校验存在 + 原子删除，仅能使用一次） */
+    /** 用一次性授权码换取登录态（校验存在 + 消费删除，仅能使用一次） */
     public LoginResponse exchangeAuthCode(String authCode) {
         if (authCode == null || authCode.isBlank()) {
             throw new BusinessException("授权码缺失，请重新登录");
         }
-        String json = redis.opsForValue().get(AUTH_CODE_KEY + authCode);
+        String json = cacheTake(AUTH_CODE_KEY + authCode);
         if (json == null) {
             // 授权码不存在（已被使用或已过期）：拒绝换取。
             // 120 秒短 TTL + 使用即删除，双重机制保证"一次性"——即便授权码泄露，泄露窗口也被压缩到极小。
             throw new BusinessException("授权码无效或已过期，请重新登录");
         }
-        // 校验通过后立即删除：授权码只能用一次，防止同一 authCode 被重放换取多个登录态。
-        redis.delete(AUTH_CODE_KEY + authCode);
         try {
             return mapper.readValue(json, LoginResponse.class);
         } catch (Exception e) {
@@ -230,8 +241,8 @@ public class GithubOAuthService {
         byte[] bytes = new byte[24];
         random.nextBytes(bytes);
         String state = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        // Redis 存储并设置 TTL（多实例共享；过期自动清理，无需手动回收）
-        redis.opsForValue().set(STATE_KEY + state, "1", STATE_TTL_SECONDS, TimeUnit.SECONDS);
+        // 存储并设置 TTL（多实例共享走 Redis；Redis 不可用降级内存，过期自动清理，无需手动回收）
+        cacheSet(STATE_KEY + state, "1", STATE_TTL_SECONDS);
         return state;
     }
 
@@ -239,10 +250,49 @@ public class GithubOAuthService {
         if (state == null) {
             return false;
         }
-        // 原子删除：返回 true 表示存在且仅能消费一次（一次性 + TTL 过期双重兜底）。
-        // 用 DEL 的返回值判断"是否存在"，比"先 GET 判断再 DEL"更安全——
-        // 多实例并发回调时两个请求可能同时 GET 成功，只有 DEL 能保证只有一个请求拿到 true。
-        return Boolean.TRUE.equals(redis.delete(STATE_KEY + state));
+        // 一次性消费：存在即删除（Redis 用 DEL 返回值原子判断，内存用 remove 返回值）。
+        // 比"先 GET 判断再 DEL"更安全——多实例并发回调时只有删除操作能保证只有一个请求拿到 true。
+        return cacheDelete(STATE_KEY + state);
+    }
+
+    // ===== 缓存读写（Redis 优先，不可用时降级本机内存，保证 OAuth 流程不被基础设施故障拖垮） =====
+
+    /** 写入缓存：优先 Redis，Redis 不可用（连接失败/超时）时降级到本机内存。
+     *  降级仅影响"多实例共享"，单实例下 state/authCode 仍是一次性 + TTL 双重兜底。 */
+    private void cacheSet(String key, String value, long ttlSeconds) {
+        try {
+            redis.opsForValue().set(key, value, ttlSeconds, TimeUnit.SECONDS);
+            return;
+        } catch (Exception ignored) {
+            // Redis 不可用：降级内存（与登录锁定/限流一致的"降级放行"策略）
+        }
+        memCache.put(key, new MemEntry(value, ttlSeconds));
+    }
+
+    /** 存在即删除（一次性消费判断）：Redis 用 DEL 返回值（原子），内存用 remove 返回值。 */
+    private boolean cacheDelete(String key) {
+        try {
+            return Boolean.TRUE.equals(redis.delete(key));
+        } catch (Exception ignored) {
+            // Redis 不可用：直接走内存
+        }
+        MemEntry entry = memCache.remove(key);
+        return entry != null && entry.expireAt >= System.currentTimeMillis();
+    }
+
+    /** 读取并删除（返回缓存值，可能为 null）：授权码场景使用（保留原 get→delete 语义）。 */
+    private String cacheTake(String key) {
+        try {
+            String value = redis.opsForValue().get(key);
+            if (value != null) {
+                redis.delete(key);
+                return value;
+            }
+        } catch (Exception ignored) {
+            // Redis 不可用：直接走内存
+        }
+        MemEntry entry = memCache.remove(key);
+        return entry != null && entry.expireAt >= System.currentTimeMillis() ? entry.value : null;
     }
 
     private String enc(String s) {
