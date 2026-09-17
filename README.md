@@ -12,6 +12,7 @@
 - **学分与绩点**：成绩**发布后**且 **≥60 分**（正常标记）才计入已修学分；GPA 按学分加权计算（Σ(单科绩点×学分) ÷ 总学分），绩点换算 ≥90→4.0 / ≥80→3.0 / ≥70→2.0 / ≥60→1.0
 - **站内通知**：顶栏铃铛 + 未读角标，选课成功/成绩发布/调课等自动通知 + 老师/管理员手动通知实时推送，通知中心（已读管理）
 - **AI 智能助手**：基于 LangGraph 智能体，查询学业分析、课程推荐、成绩解读
+- **自助修改密码**：顶栏"修改密码"入口，需校验旧密码 + 新密码强度（8-20 位且含字母与数字），改密后旧令牌立即失效（强制重新登录）
 
 ### 教师端
 - **我的课程**：创建/编辑/发布课程（周课表选择器排课）、指定授课
@@ -21,7 +22,7 @@
 
 ### 教秘端（管理员）
 - **数据统计**：全校学生/教师/课程/选课总览，专业分布、院系课程、选课排行、分数段图表（仅统计已发布成绩）
-- **账号管理**：添加/编辑教职工与学生信息、批量 Excel 导入导出、重置密码、冻结/启用
+- **账号管理**：添加/编辑教职工与学生信息、批量 Excel 导入导出、**重置密码**（保留管理员重置权限）、冻结/启用
 - **课程管理**：课程增删改查、发布控制、指派授课教师（周课表 7×12 矩阵排课）；已发布课程支持调课（仅时间/地点）
 - **成绩审核**：待审核/已审核/已发布成绩流审核
 - **选课监控**：课程选课人数、余量监控、代学生选课
@@ -36,23 +37,32 @@
 
 ### 登录方式
 - **账号密码登录**：工号/学号 + 密码（bcrypt 校验、失败锁定防爆破）
-- **GitHub OAuth 登录**：使用 GitHub 账号授权登录；首次授权后绑定现有工号/学号账号，之后一键登录（绑定关系存 `oauth_binding` 表，含 state 防 CSRF）
+- **GitHub OAuth 登录**：使用 GitHub 账号授权登录；首次授权后绑定现有工号/学号账号，之后一键登录（绑定关系存 `oauth_binding` 表，含 state 防 CSRF、`provider_uid` 唯一约束防重复绑定竞态）
+- **密码管理**：用户自助修改密码（旧密码校验 + 强度校验）；管理员可对任意账号**重置密码**
 
 ### 安全设计
 - JWT 登录鉴权 + 接口级角色权限（fail-closed，未命中规则默认 403）
+- **JWT 令牌吊销**：用户表维护 `token_version`，改密/重置密码/禁用/改角色时 +1，验签时比对数据库版本号——**旧令牌在过期前也立即失效**（防已窃取令牌复用）
+- **自助修改密码**：需校验旧密码 + 强度（8-20 位含字母数字）；管理员可重置任意账号密码（保留重置权限）
 - 登录失败锁定防爆破、bcrypt 密码哈希、账号状态（休学/冻结）联动拦截
+- **未发布成绩遮蔽**：学生成绩单仅返回"已发布"成绩的分数与绩点，未发布课程分数返回空（防提前泄露）
 - 选课容量行级锁（SELECT … FOR UPDATE）防并发超选、成绩 0-100 校验
 - Redis 限流（登录/授权码）与登录失败计数用原子 Lua 脚本（INCR+EXPIRE），Redis 故障降级放行
-- 数据库/AI 服务密码与密钥全部环境变量注入，不入库；AI 服务独立 JWT 验签 + 限流 + 仅本机监听
+- 数据库/AI 服务密码与密钥全部环境变量注入，不入库；**数据库使用专用低权账号 `sms_app`（仅授本库 CRUD，禁止 root 直连）**
+- **AI 服务请求体大小限制**（64KB，Content-Length 预检 + 流式截断，chunked 编码同样拦截）；Spring 侧 AiBodySizeFilter 亦按实际读取字节数计数
+- AI 服务独立 JWT 验签 + 限流 + 仅本机监听；**启动时校验 JWT_SECRET / MYSQL_PASSWORD / DEEPSEEK_API_KEY 缺失即拒绝启动**
 - 跨域白名单、CORS 配置外置、Swagger 文档鉴权
 - GitHub OAuth：回调 state 一次性校验（10 分钟过期）防 CSRF；`providerUid` 绑定防一码多用；Client Secret 仅环境变量注入不入库
 - 缓存序列化多态反序列化白名单（仅允许项目包与 JDK 值类型），防 Redis 投毒触发 gadget
 - WebSocket 通知认证：JWT 经连接后首条 `AUTH` 消息传递（不出现于 URL），未认证连接超时关闭；会话空闲超时显式配置（60s）
 - 通知发送权限：教师仅可发给自己授课课程的学生（服务端强校验）；已读操作校验属主（防越权）
+- **ECharts tooltip 渲染转义**：课程名等动态数据经 HTML 转义后插入 tooltip，防存储型 XSS
+- **500 异常统一包装**：对外返回通用消息 + `traceId`，服务端日志同 ID 记录完整堆栈（不泄露内部细节、可定位）
+- 登录失败提示统一为"账号或密码错误"（不区分账号类型，防枚举）
 
 ### 演示数据
 - 内置 100+ 条真实数据：学生 59 人、教师 18 人、课程 33 门、选课成绩 373 条（含学分/GPA 汇总、审核流程数据，成绩覆盖录入/待审核/待发布/已发布各阶段）
-- 新增账号初始密码统一 `123456`（首次部署后请尽快修改）
+- 新增账号初始密码统一 `123456`；**登录后请通过"修改密码"自助改密，管理员亦可重置任意账号密码**
 
 ### 文档
 - 项目解析与答辩指南：[docs/项目解析-答辩指南.md](docs/项目解析-答辩指南.md)（架构分析 / 目录与文件作用 / 业务流程 / 亮点 / 答辩 Q&A）
@@ -67,7 +77,7 @@
 | 后端 | Spring Boot 2.7 + Java 17 + MyBatis-Plus + MySQL 8.0 + Redis + WebSocket |
 | AI 服务 | Python + FastAPI + LangChain / LangGraph + ChromaDB + BM25（jieba） |
 | AI 模型 | LLM：DeepSeek 官方 `deepseek-v4-flash`；向量/重排：SiliconFlow BGE-M3 / BGE-Reranker-v2-M3 |
-| 安全 | JWT（HS256）+ BCrypt + 角色权限拦截器 + 多态反序列化白名单 |
+| 安全 | JWT（HS256）+ 令牌版本吊销 + BCrypt + 角色权限拦截器 + 多态反序列化白名单 + 低权数据库账号 |
 
 ## 系统架构
 
@@ -163,9 +173,11 @@ classify（意图识别）→ fetch（查库）
 │   └── db.py         # 参数化数据库访问
 ├── frontend/         # Vue 3 前端
 │   └── src/views/    # student/ teacher/ admin 三角色页面
-└── sql/init.sql      # 数据库初始化脚本
-    sql/oauth_binding.sql  # GitHub OAuth 绑定关系表（可选，启用 GitHub 登录时执行）
-    sql/notifications.sql  # 站内通知表（notification / notification_receiver）
+└── sql/
+    ├── init.sql              # 数据库初始化脚本（建库建表 + 演示数据 + 外键约束 + 令牌版本列 + 唯一索引）
+    ├── create_app_user.sql   # 创建专用低权账号 sms_app（仅授本库 CRUD，替代 root 直连，安全加固）
+    ├── oauth_binding.sql     # GitHub OAuth 绑定表（可选，历史库升级用；init.sql 已含）
+    └── notifications.sql     # 站内通知表（可选，历史库升级用；init.sql 已含）
 ```
 
 ## 快速开始
@@ -173,10 +185,11 @@ classify（意图识别）→ fetch（查库）
 ### 1. 初始化数据库
 
 ```sql
-mysql -uroot -p < sql/init.sql
-mysql -uroot -p student_management < sql/oauth_binding.sql   # 启用 GitHub 登录时执行
-mysql -uroot -p student_management < sql/notifications.sql   # 站内通知系统（必执行，否则通知功能不可用）
+mysql -uroot -p < sql/init.sql              # 建库建表 + 演示数据（已含 OAuth 绑定表与通知表）
+mysql -uroot -p < sql/create_app_user.sql   # 创建专用低权账号 sms_app（安全加固，必执行）
 ```
+
+> 历史库升级（已存在数据时）：仅执行缺失的 `sql/oauth_binding.sql` / `sql/notifications.sql`（幂等 IF NOT EXISTS），并按需为 staff/student 补 `token_version` 列。
 
 ### 2. 启动后端（8080）
 
@@ -184,8 +197,8 @@ mysql -uroot -p student_management < sql/notifications.sql   # 站内通知系�
 cd backend
 # 注入密钥与数据库凭据（环境变量）
 export JWT_SECRET='<64字节随机密钥>'
-export DB_USERNAME=root
-export DB_PASSWORD='<数据库密码>'
+export DB_USERNAME=sms_app
+export DB_PASSWORD='<sms_app 密码>'
 export GITHUB_CLIENT_ID='<GitHub OAuth App Client ID>'         # 可选：启用 GitHub 登录
 export GITHUB_CLIENT_SECRET='<GitHub OAuth App Client Secret>' # 可选：启用 GitHub 登录
 # export GITHUB_REDIRECT_URI='http://localhost:8080/api/oauth/github/callback'  # 可选：自定义回调地址
@@ -210,7 +223,7 @@ npm run dev
 
 访问 http://localhost:5173
 
-## 默认账号（初始密码均为 `123456`，首次部署后请修改）
+## 默认账号（初始密码均为 `123456`，登录后请自助改密）
 
 | 角色 | 账号 | 说明 |
 |---|---|---|
@@ -222,14 +235,15 @@ npm run dev
 
 | 变量 | 用途 | 位置 |
 |---|---|---|
-| `JWT_SECRET` | JWT 签名密钥（≥32字符） | 后端启动时注入 |
-| `DB_USERNAME` / `DB_PASSWORD` | 数据库凭据 | 后端启动时注入 |
+| `JWT_SECRET` | JWT 签名密钥（≥32字符），**与 AI 服务共享** | 后端 / backend-ai/.env |
+| `DB_USERNAME` / `DB_PASSWORD` | 数据库专用低权账号（`sms_app`）凭据 | 后端启动时注入 |
 | `CORS_ALLOWED_ORIGINS` | 前端域名白名单 | 后端启动时注入 |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth App 凭据（可选，启用 GitHub 登录） | 后端启动时注入 |
 | `GITHUB_REDIRECT_URI` | GitHub 授权回调地址（默认 `http://localhost:8080/api/oauth/github/callback`） | 后端启动时注入 |
-| `MYSQL_PASSWORD` | AI 服务数据库密码 | backend-ai/.env |
+| `MYSQL_HOST` / `MYSQL_PORT` / `MYSQL_USER` / `MYSQL_PASSWORD` | AI 服务数据库连接（只读，`sms_app`） | backend-ai/.env |
 | `DEEPSEEK_API_KEY` | AI 对话模型密钥（`deepseek-v4-flash`，必填） | backend-ai/.env |
 | `SILICONFLOW_API_KEY` | AI 向量检索密钥（选课建议使用） | backend-ai/.env |
+| `AI_PORT` | AI 服务监听端口（默认 8000，仅本机） | backend-ai/.env |
 
 > **安全提示**：`.env`、真实密钥与安全审查报告均已被 `.gitignore` 排除，请勿将任何真实密钥提交到仓库。
 
