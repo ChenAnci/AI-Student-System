@@ -21,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -73,6 +74,13 @@ class AccountServiceTest {
         UserContext.CurrentUser user = new UserContext.CurrentUser();
         user.setUserId(2L);
         user.setRoleType("TEACHER");
+        return user;
+    }
+
+    private UserContext.CurrentUser studentUser() {
+        UserContext.CurrentUser user = new UserContext.CurrentUser();
+        user.setUserId(64L);
+        user.setRoleType("STUDENT");
         return user;
     }
 
@@ -320,5 +328,148 @@ class AccountServiceTest {
         List<StudentExcelRow> rows = EasyExcel.read(new ByteArrayInputStream(response.getContentAsByteArray()))
                 .head(StudentExcelRow.class).sheet().doReadSync();
         assertThat(rows).isEmpty();
+    }
+
+    // ==================== 自助修改密码 ====================
+
+    private Student studentWithPassword(String password) {
+        Student s = new Student();
+        s.setId(64L);
+        s.setStudentNo("S20240051");
+        s.setPasswordHash(new BCryptPasswordEncoder().encode(password));
+        s.setTokenVersion(1);
+        return s;
+    }
+
+    private Staff staffWithPassword(String password) {
+        Staff s = new Staff();
+        s.setId(2L);
+        s.setStaffNo("T1001");
+        s.setPasswordHash(new BCryptPasswordEncoder().encode(password));
+        s.setTokenVersion(1);
+        return s;
+    }
+
+    @Test
+    @DisplayName("修改密码：学生旧密码正确时更新为新密码密文并递增令牌版本")
+    void changePassword_shouldUpdateStudentHashWhenOldPasswordCorrect() {
+        UserContext.clear();
+        UserContext.set(studentUser());
+        String oldHash = new BCryptPasswordEncoder().encode("oldPass123");
+        Student stu = studentWithPassword("oldPass123");
+        when(studentMapper.selectById(64L)).thenReturn(stu);
+
+        accountService.changePassword("oldPass123", "newPass456");
+
+        ArgumentCaptor<Student> captor = ArgumentCaptor.forClass(Student.class);
+        verify(studentMapper).updateById(captor.capture());
+        String newHash = captor.getValue().getPasswordHash();
+        // 密码确实被更新：新密文能匹配新密码，且不再匹配旧密码
+        assertThat(new BCryptPasswordEncoder().matches("newPass456", newHash)).isTrue();
+        assertThat(new BCryptPasswordEncoder().matches("oldPass123", newHash)).isFalse();
+        assertThat(newHash).isNotEqualTo(oldHash);
+        // 令牌版本号递增：改密后旧 token 全部失效
+        assertThat(captor.getValue().getTokenVersion()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("修改密码：教师旧密码正确时更新为新密码密文并递增令牌版本")
+    void changePassword_shouldUpdateStaffHashWhenOldPasswordCorrect() {
+        UserContext.clear();
+        UserContext.set(teacherUser());
+        Staff st = staffWithPassword("oldPass123");
+        when(staffMapper.selectById(2L)).thenReturn(st);
+
+        accountService.changePassword("oldPass123", "newPass456");
+
+        ArgumentCaptor<Staff> captor = ArgumentCaptor.forClass(Staff.class);
+        verify(staffMapper).updateById(captor.capture());
+        assertThat(new BCryptPasswordEncoder().matches("newPass456", captor.getValue().getPasswordHash())).isTrue();
+        assertThat(captor.getValue().getTokenVersion()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("管理员重置密码：学生令牌版本递增，旧 token 失效")
+    void resetPassword_shouldIncrementStudentTokenVersion() {
+        Student stu = studentWithPassword("oldPass123");
+        when(studentMapper.selectById(64L)).thenReturn(stu);
+
+        accountService.resetPassword("STUDENT", 64L);
+
+        ArgumentCaptor<Student> captor = ArgumentCaptor.forClass(Student.class);
+        verify(studentMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getTokenVersion()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("冻结/启用账号：令牌版本递增，旧 token 失效")
+    void toggleStatus_shouldIncrementTokenVersion() {
+        UserContext.clear();
+        UserContext.set(adminUser());
+        Student stu = studentWithPassword("oldPass123");
+        when(studentMapper.selectById(64L)).thenReturn(stu);
+
+        accountService.toggleStatus("STUDENT", 64L, "FROZEN");
+
+        ArgumentCaptor<Student> captor = ArgumentCaptor.forClass(Student.class);
+        verify(studentMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo("FROZEN");
+        assertThat(captor.getValue().getTokenVersion()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("修改密码：旧密码错误时拒绝且不更新")
+    void changePassword_shouldRejectWhenOldPasswordWrong() {
+        UserContext.clear();
+        UserContext.set(studentUser());
+        when(studentMapper.selectById(64L)).thenReturn(studentWithPassword("oldPass123"));
+
+        assertThatThrownBy(() -> accountService.changePassword("wrongPass", "newPass456"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("旧密码");
+
+        verify(studentMapper, never()).updateById(any());
+    }
+
+    @Test
+    @DisplayName("修改密码：账号不存在时拒绝")
+    void changePassword_shouldRejectWhenAccountMissing() {
+        UserContext.clear();
+        UserContext.set(studentUser());
+        when(studentMapper.selectById(64L)).thenReturn(null);
+
+        assertThatThrownBy(() -> accountService.changePassword("oldPass123", "newPass456"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("账号不存在");
+
+        verify(studentMapper, never()).updateById(any());
+    }
+
+    @Test
+    @DisplayName("修改密码：新密码与旧密码相同时拒绝")
+    void changePassword_shouldRejectWhenNewEqualsOld() {
+        UserContext.clear();
+        UserContext.set(studentUser());
+        when(studentMapper.selectById(64L)).thenReturn(studentWithPassword("samePass123"));
+
+        assertThatThrownBy(() -> accountService.changePassword("samePass123", "samePass123"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("相同");
+
+        verify(studentMapper, never()).updateById(any());
+    }
+
+    @Test
+    @DisplayName("修改密码：新密码强度不足（过短）时拒绝")
+    void changePassword_shouldRejectWeakNewPassword() {
+        UserContext.clear();
+        UserContext.set(studentUser());
+
+        // 强度校验先于查库，故无需 stub selectById
+        assertThatThrownBy(() -> accountService.changePassword("oldPass123", "short1"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("新密码");
+
+        verify(studentMapper, never()).updateById(any());
     }
 }

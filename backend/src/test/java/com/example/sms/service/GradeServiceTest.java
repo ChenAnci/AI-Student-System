@@ -13,6 +13,7 @@ import com.example.sms.mapper.StaffMapper;
 import com.example.sms.mapper.StudentCourseMapper;
 import com.example.sms.mapper.StudentMapper;
 import com.example.sms.util.UserContext;
+import com.example.sms.vo.GradeVO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -301,5 +302,48 @@ class GradeServiceTest {
         assertThatThrownBy(() -> gradeService.publish(1L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("仅审核通过的课程可以发布");
+    }
+
+    // ==================== 成绩单（未发布成绩不泄露） ====================
+
+    private void mockMyGrades(StudentCourse sc, String auditStatus) {
+        when(studentCourseMapper.selectList(any())).thenReturn(List.of(sc));
+        when(courseMapper.selectBatchIds(any())).thenReturn(List.of(course));
+        CourseGradeAudit audit = new CourseGradeAudit();
+        audit.setCourseId(course.getId());
+        audit.setStatus(auditStatus);
+        when(auditMapper.selectList(any())).thenReturn(List.of(audit));
+    }
+
+    @Test
+    @DisplayName("成绩单：已发布课程正常返回分数与绩点")
+    void myGrades_shouldReturnPublishedScore() {
+        StudentCourse sc = buildSc(10L, 1L);
+        sc.setScore(new BigDecimal("88"));
+        sc.setMark("NORMAL");
+        mockMyGrades(sc, "PUBLISHED");
+
+        List<GradeVO> result = gradeService.myGrades(1L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getScore()).isEqualByComparingTo("88");
+        assertThat(result.get(0).getGradePoint()).isEqualByComparingTo("3.0");
+        assertThat(result.get(0).getPassed()).isTrue();
+    }
+
+    @Test
+    @DisplayName("成绩单：未发布课程分数/绩点置空，不向学生泄露")
+    void myGrades_shouldMaskScoreWhenNotPublished() {
+        StudentCourse sc = buildSc(10L, 1L);
+        sc.setScore(new BigDecimal("88"));
+        sc.setMark("NORMAL");
+        mockMyGrades(sc, "SUBMITTED");
+
+        List<GradeVO> result = gradeService.myGrades(1L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getScore()).isNull();
+        assertThat(result.get(0).getGradePoint()).isNull();
+        assertThat(result.get(0).getPassed()).isFalse();
     }
 }

@@ -128,7 +128,7 @@ class NotificationServiceTest {
         when(courseMapper.selectById(10L)).thenReturn(course);
         when(studentCourseMapper.selectList(any())).thenReturn(List.of(studentCourse(10L, 101L)));
         when(notificationMapper.insert(any())).thenReturn(1);
-        when(receiverMapper.insert(any())).thenReturn(1);
+        when(receiverMapper.batchInsert(any())).thenReturn(1);
         lenient().when(objectMapper.writeValueAsString(any())).thenReturn("{}");
 
         SendNotificationDTO dto = dto("COURSE");
@@ -149,12 +149,12 @@ class NotificationServiceTest {
         s2.setId(102L);
         when(studentMapper.selectList(any())).thenReturn(List.of(s1, s2));
         when(notificationMapper.insert(any())).thenReturn(1);
-        when(receiverMapper.insert(any())).thenReturn(1);
+        when(receiverMapper.batchInsert(any())).thenReturn(1);
         lenient().when(objectMapper.writeValueAsString(any())).thenReturn("{}");
 
         notificationService.send(dto("ALL"));
         verify(notificationMapper).insert(any());
-        verify(receiverMapper, times(2)).insert(any());
+        verify(receiverMapper).batchInsert(any());
     }
 
     /** 管理员按班级：解析该班级学生 */
@@ -165,13 +165,13 @@ class NotificationServiceTest {
         s.setId(201L);
         when(studentMapper.selectList(any())).thenReturn(List.of(s));
         when(notificationMapper.insert(any())).thenReturn(1);
-        when(receiverMapper.insert(any())).thenReturn(1);
+        when(receiverMapper.batchInsert(any())).thenReturn(1);
         lenient().when(objectMapper.writeValueAsString(any())).thenReturn("{}");
 
         SendNotificationDTO dto = dto("CLASS");
         dto.getTarget().setClassName("软工2301");
         notificationService.send(dto);
-        verify(receiverMapper, times(1)).insert(any());
+        verify(receiverMapper).batchInsert(any());
     }
 
     /** 精确选人但列表为空 → 报错 */
@@ -190,19 +190,19 @@ class NotificationServiceTest {
     void sendSystemEmptyReceiversSkipped() {
         notificationService.sendSystem("ENROLL", "选课成功", "内容", List.of());
         verify(notificationMapper, never()).insert(any());
-        verify(receiverMapper, never()).insert(any());
+        verify(receiverMapper, never()).batchInsert(any());
     }
 
     /** 系统通知正常发送并落库 */
     @Test
     void sendSystemPersists() throws Exception {
         when(notificationMapper.insert(any())).thenReturn(1);
-        when(receiverMapper.insert(any())).thenReturn(1);
+        when(receiverMapper.batchInsert(any())).thenReturn(1);
         lenient().when(objectMapper.writeValueAsString(any())).thenReturn("{}");
 
         notificationService.sendSystem("ENROLL", "选课成功", "内容", List.of(301L));
         verify(notificationMapper).insert(any());
-        verify(receiverMapper).insert(any());
+        verify(receiverMapper).batchInsert(any());
     }
 
     // ===== 已读 =====
