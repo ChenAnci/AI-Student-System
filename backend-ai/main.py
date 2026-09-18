@@ -217,6 +217,7 @@ def chat(
         "student_profile": {},
         "tool_results": {},
         "retrieved": [],
+        "web_results": [],
         "answer": "",
         "error": None,
     }

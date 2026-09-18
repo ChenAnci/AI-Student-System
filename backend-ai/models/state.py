@@ -20,6 +20,7 @@ class AIState(TypedDict):
     student_profile: dict[str, Any]   # 学生基本信息
     tool_results: dict[str, Any]      # 数据查询结果
     retrieved: list[dict]             # 向量检索 + 重排结果
+    web_results: list[dict]            # Tavily 联网搜索结果（仅 FREE_QA 填写，可为空）
     answer: str                       # 最终回答
     error: str | None                 # 错误信息
 
