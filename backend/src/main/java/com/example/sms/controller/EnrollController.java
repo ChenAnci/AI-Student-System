@@ -89,6 +89,7 @@ public class EnrollController {
     @ApiOperation("教秘：选课监控")
     @GetMapping("/monitor")
     public Result<List<EnrollMonitorVO>> monitor() {
+        // 教秘选课监控：返回各课程选课人数/容量等统计，供选课监控页展示
         return Result.success(enrollService.monitor());
     }
 

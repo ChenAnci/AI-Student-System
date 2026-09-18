@@ -72,6 +72,7 @@ public class GithubOAuthService {
      *  仅保证单实例场景 OAuth 流程可用；生产多实例务必保证 Redis 可用。 */
     private final ConcurrentHashMap<String, MemEntry> memCache = new ConcurrentHashMap<>();
 
+    /** 内存降级缓存条目：缓存值 + 绝对过期时间戳（读取时校验，过期即视为不存在） */
     private static final class MemEntry {
         final String value;
         final long expireAt;
@@ -81,7 +82,11 @@ public class GithubOAuthService {
         }
     }
 
-    /** 1. 生成 GitHub 授权跳转地址（未配置时抛业务提示） */
+    /**
+     * 1. 生成 GitHub 授权跳转地址（未配置时抛业务提示）。
+     * 调用逻辑：OAuthController.authorize（/api/oauth/github/authorize，带每 IP 轻量限流）→ githubOAuthService.buildAuthorizeUrl：前端"GitHub 登录"点击后取回授权 URL，浏览器跳转 GitHub 授权页。
+     * 为什么：每次生成随机 state 并缓存（Redis 优先、不可用降级内存），回调时必须原样带回并一次性消费，防止 CSRF 登录/绑定劫持；客户端凭据未配置时明确报错而非静默失败，便于运维发现配置遗漏。
+     */
     public String buildAuthorizeUrl() {
         // 客户端凭据缺失时直接给出明确提示而非静默失败，便于运维发现配置遗漏
         if (clientId.isBlank() || clientSecret.isBlank()) {
@@ -95,7 +100,11 @@ public class GithubOAuthService {
                 + "&scope=read:user&state=" + state;
     }
 
-    /** 2. 回调处理：code + state → 已绑定返回登录成功（含用户信息），否则返回待绑定凭证 */
+    /**
+     * 2. 回调处理：code + state → 已绑定返回登录成功（含用户信息），否则返回待绑定凭证。
+     * 调用逻辑：OAuthController.callback（/api/oauth/github/callback）→ githubOAuthService.handleCallback：GitHub 授权后 302 回调，校验并一次性消费 state → code 换 access_token → 拉取用户 uid → 已绑定则 issueByUserNo 签发登录态（经一次性授权码回前端换取），未绑定则返回 providerUid 引导走 bind。
+     * 为什么：state 一次性防 CSRF（存在即删除，多实例并发仅一个请求能消费成功）；回调 URL 不携带 JWT，改用 120 秒一次性授权码，避免登录态暴露在浏览器历史/第三方日志中。
+     */
     public OAuthCallbackVO handleCallback(String code, String state) {
         if (code == null || code.isBlank()) {
             throw new BusinessException("授权回调缺少 code");
@@ -126,7 +135,11 @@ public class GithubOAuthService {
         return vo;
     }
 
-    /** 3. 绑定现有账号并登录 */
+    /**
+     * 3. 绑定现有账号并登录。
+     * 调用逻辑：OAuthController.bind（/api/oauth/github/bind）→ githubOAuthService.bind：前端带 GitHub uid + 系统账号密码提交，先校验该 uid 未绑定他号 → verifyAndLogin 校验账号密码 → 插入 OAuthBinding 绑定记录 → 返回 JWT 登录态。
+     * 为什么：绑定前必须账号密码校验（复用登录守卫：锁定+限流+ENABLED），防止拿截获 uid 越权绑定到他人账号；唯一索引（uk_provider_uid / uk_user_provider）兜底并发重复绑定并转明确业务提示；Redis 不可用时降级内存，保证单实例下 OAuth 流程可用。
+     */
     public LoginResponse bind(String username, String password, String providerUid) {
         if (providerUid == null || providerUid.isBlank()) {
             throw new BusinessException("绑定凭证缺失，请重新发起 GitHub 登录");
@@ -195,6 +208,7 @@ public class GithubOAuthService {
                 .last("LIMIT 1"));
     }
 
+    /** 用 GitHub 授权码 code 换取 access_token（表单 POST，失败转业务异常并透出 GitHub 错误描述） */
     private String exchangeToken(String code) {
         String body = "client_id=" + enc(clientId)
                 + "&client_secret=" + enc(clientSecret)
@@ -214,6 +228,7 @@ public class GithubOAuthService {
         return token;
     }
 
+    /** 携带 access_token 调用 GitHub API 拉取当前登录用户信息（从中取全局唯一 id 作为绑定依据） */
     private JsonNode fetchGithubUser(String accessToken) {
         HttpRequest req = HttpRequest.newBuilder(URI.create(USER_URL))
                 .header("Authorization", "Bearer " + accessToken)
@@ -223,6 +238,7 @@ public class GithubOAuthService {
         return sendJson(req);
     }
 
+    /** 发送 HTTP 请求并解析 JSON 响应；非 200 或解析异常统一转为业务异常（不向外抛底层异常） */
     private JsonNode sendJson(HttpRequest req) {
         try {
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
@@ -295,6 +311,7 @@ public class GithubOAuthService {
         return entry != null && entry.expireAt >= System.currentTimeMillis() ? entry.value : null;
     }
 
+    /** URL 编码（UTF-8），用于拼接授权地址查询参数与换 token 的表单体 */
     private String enc(String s) {
         return URLEncoder.encode(s, StandardCharsets.UTF_8);
     }

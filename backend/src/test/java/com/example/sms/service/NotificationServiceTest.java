@@ -31,6 +31,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 通知服务单元测试：权限边界（教师仅可发本课程）、接收人解析（管理员）、系统自动通知、已读标记
+ */
 @ExtendWith(MockitoExtension.class)
 class NotificationServiceTest {
 
@@ -62,6 +65,7 @@ class NotificationServiceTest {
         UserContext.clear();
     }
 
+    /** 切换到教师登录上下文（userId=1L） */
     private void teacherContext() {
         UserContext.CurrentUser u = new UserContext.CurrentUser();
         u.setUserId(1L);
@@ -71,6 +75,7 @@ class NotificationServiceTest {
         UserContext.set(u);
     }
 
+    /** 切换到管理员登录上下文 */
     private void adminContext() {
         UserContext.CurrentUser u = new UserContext.CurrentUser();
         u.setUserId(2L);
@@ -80,6 +85,7 @@ class NotificationServiceTest {
         UserContext.set(u);
     }
 
+    /** 构造指定发送类型（kind）的基础通知 DTO */
     private SendNotificationDTO dto(String kind) {
         SendNotificationDTO d = new SendNotificationDTO();
         d.setTitle("测试");
@@ -224,6 +230,7 @@ class NotificationServiceTest {
     void markReadOwnSuccess() {
         NotificationReceiver r = new NotificationReceiver();
         r.setId(7L);
+        // 接收人 studentId 与当前登录用户（teacherContext 的 userId=1L）一致，属于"自己的通知"
         r.setStudentId(1L);
         r.setNotificationId(2L);
         r.setIsRead(false);
@@ -245,6 +252,7 @@ class NotificationServiceTest {
         verify(receiverMapper, never()).updateById(any());
     }
 
+    /** 构造一条学生选课记录（courseId + studentId） */
     private com.example.sms.entity.StudentCourse studentCourse(Long courseId, Long studentId) {
         com.example.sms.entity.StudentCourse sc = new com.example.sms.entity.StudentCourse();
         sc.setCourseId(courseId);

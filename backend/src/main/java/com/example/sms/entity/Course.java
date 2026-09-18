@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 课程实体
+ * 课程实体，对应数据库表 course：课程基本信息、容量与发布状态
  */
 @Data
 @TableName("course")
@@ -51,5 +51,6 @@ public class Course {
     /** UNPUBLISHED | PUBLISHED */
     private String status;
 
+    /** 更新时间（选课中心按此倒序展示课程） */
     private LocalDateTime updatedAt;
 }

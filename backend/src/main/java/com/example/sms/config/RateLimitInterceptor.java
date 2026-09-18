@@ -27,6 +27,7 @@ import java.util.Collections;
 @Component
 public class RateLimitInterceptor implements HandlerInterceptor {
 
+    // 限流参数：单 IP 每 WINDOW_SECONDS 秒内最多 LIMIT 次登录尝试，超限返回 429
     private static final String KEY = "sms:rate:login:ip:";
     private static final int LIMIT = 30;
     private static final long WINDOW_SECONDS = 60;
@@ -37,6 +38,13 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     @Autowired
     private StringRedisTemplate redis;
 
+    /**
+     * 调用逻辑：Spring MVC 拦截器，仅对登录接口 /api/auth/login 在进入 Controller 之前执行
+     * （WebConfig 中只把本拦截器注册到该路径，内部对其它 URI 也直接放行），每次登录尝试都会先做 IP 限流计数。
+     * 为什么：用 Redis INCR+EXPIRE 原子 Lua 脚本计数，避免分步执行（INCR 后进程崩溃）导致 key 永久无 TTL 残留，
+     * 且计数存 Redis 使多实例共享同一限流窗口；XFF 默认不信（只认连接对端 IP）防止伪造请求头绕过限流；
+     * Redis 故障时仅捕获 DataAccessException 降级放行——可用性优先，限流组件故障不拖垮登录，只记告警。
+     */
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {

@@ -23,12 +23,14 @@ public class StatsController {
     @Autowired
     private StatsService statsService;
 
+    /** 教秘端全校数据统计：返回学生/课程/选课等全校汇总数据 */
     @ApiOperation("教秘端全校数据统计")
     @GetMapping("/admin")
     public Result<AdminStatsVO> adminStats() {
         return Result.success(statsService.adminStats());
     }
 
+    /** 教师端所授课程成绩统计：按当前登录教师统计其所授课程的成绩情况 */
     @ApiOperation("教师端所授课程成绩统计")
     @GetMapping("/teacher")
     public Result<TeacherStatsVO> teacherStats() {

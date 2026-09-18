@@ -40,6 +40,10 @@ public class RedisConfig {
                     + "return c",
             Long.class);
 
+    /**
+     * 构建 Redis 缓存管理器（Spring Cache 接入 Redis）：
+     * 值序列化采用 JSON，并通过 BasicPolymorphicTypeValidator 白名单限制反序列化类型（安全加固）。
+     */
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory factory) {
         // 多态反序列化白名单：项目实体包 + JDK 常用值类型（集合/时间/数值/字符串/包装类），

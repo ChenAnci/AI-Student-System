@@ -9,6 +9,9 @@ import org.apache.ibatis.annotations.Select;
 import java.math.BigDecimal;
 import java.util.List;
 
+/**
+ * 课程表 Mapper：对应数据库表 course，提供课程基础 CRUD 及选课中心相关查询
+ */
 @Mapper
 public interface CourseMapper extends BaseMapper<Course> {
 

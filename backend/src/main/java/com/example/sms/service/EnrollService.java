@@ -30,7 +30,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * 选课/退课服务
+ * 选课/退课服务：学生选课/退课（含 FOR UPDATE 并发容量控制、成绩发布锁定、时间冲突校验）、
+ * 我的课表、教秘选课监控与代选/代退
  */
 @Service
 public class EnrollService {
@@ -56,7 +57,11 @@ public class EnrollService {
     @Autowired
     private NotificationService notificationService;
 
-    /** 学生选课 */
+    /**
+     * 学生选课。
+     * 调用逻辑：EnrollController.enroll → enrollService.enroll：学生在选课中心点击选课，流程为 FOR UPDATE 行锁 → 依次校验课程存在/已发布/未满员/成绩未发布/学生状态正常/未重复选课/无时间冲突 → 插入选课记录 + 人数+1 → 自动发送选课成功通知；教秘代选 adminEnroll 复用本方法。
+     * 为什么：SELECT ... FOR UPDATE 行级锁把"容量检查 → 写选课记录 → 计数+1"串行化，防止并发选课读到相同 currentEnrolled 导致超卖；成绩已发布的课程禁止选课，避免"选了退不掉"的卡死状态。
+     */
     @Transactional
     public void enroll(Long studentId, Long courseId) {
         // 选课校验顺序设计（先锁后查，环环相扣）：
@@ -101,7 +106,11 @@ public class EnrollService {
                 List.of(studentId));
     }
 
-    /** 学生退课 */
+    /**
+     * 学生退课。
+     * 调用逻辑：EnrollController.drop → enrollService.drop：学生在"我的课表"点击退课，先锁课程行 → 校验已选且成绩未发布 → 删除选课记录 + 人数-1（下限 0）；教秘代退 adminDrop 复用本方法。
+     * 为什么：退课同样先加 FOR UPDATE 行锁，防止并发退课对同一 currentEnrolled 同时 -1 造成计数丢失更新；成绩已发布后成绩/学分已定论且计入 GPA，不可退课。
+     */
     @Transactional
     public void drop(Long studentId, Long courseId) {
         // 退课同样先锁课程行：并发退课时若不加锁，两个请求可能同时对同一 currentEnrolled 做 -1，造成计数丢失更新
@@ -191,6 +200,7 @@ public class EnrollService {
         }
     }
 
+    /** 排课时间片：day 为星期（1-7，日=7），[start, end) 左闭右开节次区间 */
     private static class TimeSlot {
         int day;
         int start;

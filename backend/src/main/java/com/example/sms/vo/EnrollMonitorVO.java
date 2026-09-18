@@ -16,6 +16,8 @@ public class EnrollMonitorVO {
     private String teacherName;
     private Integer capacity;
     private Integer currentEnrolled;
+    /** 剩余名额 = 容量 - 已选人数 */
     private Integer remain;
+    /** 课程状态：UNPUBLISHED 未发布 | PUBLISHED 已发布 */
     private String status;
 }

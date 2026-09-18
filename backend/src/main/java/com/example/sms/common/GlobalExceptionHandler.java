@@ -13,6 +13,9 @@ import java.util.UUID;
 
 /**
  * 全局异常处理
+ *
+ * 调用逻辑：任何 Controller / Service 抛出未捕获异常都会进入本类对应的 @ExceptionHandler 方法，
+ * 将异常统一转换为 Result 结构返回，保证对前端永远输出统一信封而不是 Spring 默认错误页。
  */
 @Slf4j
 @RestControllerAdvice
@@ -30,6 +33,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(status).body(Result.error(e.getCode(), e.getMessage()));
     }
 
+    /**
+     * 参数校验异常（@Valid 校验失败）：取第一条字段错误提示，统一以 400 返回
+     *
+     * 调用逻辑：Controller 入参标注 @Valid 且字段约束（@NotBlank/@Email 等）不满足时，
+     * Spring 在校参阶段抛出 MethodArgumentNotValidException，由本方法兜底转成 code=400。
+     * 为什么：统一为 400（参数错误）并取第一条字段提示的中文信息，避免把 Spring 的英文
+     * 校验报文直接透出；分类到 400 而非 500，让前端明确是"用户输入问题"而非"系统故障"。
+     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public Result<Void> handleValid(MethodArgumentNotValidException e) {
         // 参数校验失败：取第一个字段错误提示返回 code=400（参数错误），
@@ -39,6 +50,17 @@ public class GlobalExceptionHandler {
         return Result.error(400, msg);
     }
 
+    /**
+     * 兜底异常：生成 traceId 记录服务端日志，对外仅返回通用提示与 traceId（不暴露堆栈）
+     *
+     * 调用逻辑：任何未被上面具体 @ExceptionHandler 捕获的异常（空指针、DB 异常等）最终落到本方法，
+     * 是对前端响应的最后一道防线。
+     * 为什么：
+     * 1) 对外只返回 code=500 + traceId、不返回堆栈，防止泄露内部实现细节（类名、SQL、文件路径）给攻击者；
+     * 2) 通过 MDC 将 traceId 写入日志上下文并记录完整堆栈，日志中该请求的所有打印都带上 traceId，
+     *    用户反馈 traceId 即可在服务端日志快速定位到具体异常；
+     * 3) 统一按 500 分类，与 400/403 形成清晰的错误码体系，前端与监控各自处理。
+     */
     @ExceptionHandler(Exception.class)
     public Result<Void> handleOther(Exception e) {
         // 兜底异常：生成 traceId 并在服务端日志中关联记录完整堆栈（L-1），

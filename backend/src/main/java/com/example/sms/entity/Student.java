@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 学生实体
+ * 学生实体，对应数据库表 student：学生账号、学籍信息与学业数据（学分/绩点）
  */
 @Data
 @TableName("student")
@@ -38,6 +38,7 @@ public class Student {
     /** 男/女 */
     private String gender;
 
+    /** 手机号 */
     private String phone;
 
     /** 院系 */
@@ -61,7 +62,9 @@ public class Student {
     /** 累计平均绩点 */
     private BigDecimal gpa;
 
+    /** 创建时间 */
     private LocalDateTime createdAt;
 
+    /** 更新时间 */
     private LocalDateTime updatedAt;
 }

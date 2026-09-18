@@ -36,6 +36,7 @@ public class GradeController {
     @Autowired
     private GradeService gradeService;
 
+    /** 课程选课名单（教师）：按课程 id 返回选课学生列表（含成绩字段） */
     @ApiOperation("教师：课程选课名单（含成绩）")
     @GetMapping("/course/{courseId}/students")
     public Result<List<Map<String, Object>>> courseStudents(@PathVariable Long courseId) {
@@ -58,18 +59,21 @@ public class GradeController {
         return Result.success();
     }
 
+    /** 我的成绩流程（教师）：返回当前教师发起的成绩审核记录列表 */
     @ApiOperation("教师：我的成绩流程")
     @GetMapping("/my-audits")
     public Result<List<AuditVO>> myAudits() {
         return Result.success(gradeService.listMyAudits());
     }
 
+    /** 待审核列表（教秘）：返回处于已提交（SUBMITTED）待审核状态的成绩流程 */
     @ApiOperation("教秘：待审核列表")
     @GetMapping("/pending")
     public Result<List<AuditVO>> pending() {
         return Result.success(gradeService.listPendingAudits());
     }
 
+    /** 全部成绩流程（教秘）：返回所有成绩审核记录列表 */
     @ApiOperation("教秘：全部成绩流程")
     @GetMapping("/audits")
     public Result<List<AuditVO>> audits() {
@@ -92,24 +96,28 @@ public class GradeController {
         return Result.success();
     }
 
+    /** 我的成绩单（学生）：返回当前学生的已发布（PUBLISHED）成绩列表 */
     @ApiOperation("学生：我的成绩单")
     @GetMapping("/my")
     public Result<List<GradeVO>> myGrades() {
         return Result.success(gradeService.myGrades(UserContext.getUserId()));
     }
 
+    /** 学业仪表盘（学生）：返回当前学生的成绩汇总统计（GPA/学分等） */
     @ApiOperation("学生：学业仪表盘")
     @GetMapping("/dashboard")
     public Result<Map<String, Object>> dashboard() {
         return Result.success(gradeService.dashboard(UserContext.getUserId()));
     }
 
+    /** 导出课程成绩名单 Excel（教师）：直接写入 response 输出流 */
     @ApiOperation("教师：导出课程成绩名单 Excel")
     @GetMapping("/course/{courseId}/export")
     public void exportCourseStudents(@PathVariable Long courseId, HttpServletResponse response) {
         gradeService.exportCourseStudents(courseId, response);
     }
 
+    /** 下载成绩导入模板（教师）：模板预填本课程选课学生，供批量导入使用 */
     @ApiOperation("教师：下载成绩导入模板（预填选课学生）")
     @GetMapping("/course/{courseId}/template")
     public void downloadGradeTemplate(@PathVariable Long courseId, HttpServletResponse response) {

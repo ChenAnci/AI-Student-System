@@ -88,7 +88,10 @@ public class AccountService {
     }
 
     /**
-     * 添加账号（教师生成 T 工号，学生生成 S 学号），初始密码 123456
+     * 添加账号（教师生成 T 工号，学生生成 S 学号），初始密码 123456。
+     * 事务：账号记录与自动生成的工号/学号同事务写入，失败整体回滚，避免半截数据。
+     * 调用逻辑：AccountController.add → accountService.createAccount：教秘在账号管理页提交表单，内部自动生成 T 工号/S 学号并以 123456 密文落库，返回后前端刷新账号列表。
+     * 为什么：@Transactional 保证账号记录与工号/学号生成同事务原子提交，失败整体回滚不留半截数据；初始密码统一 123456，由用户首次登录后自助修改。
      */
     @Transactional
     public void createAccount(AccountCreateDTO dto) {
@@ -127,7 +130,11 @@ public class AccountService {
         }
     }
 
-    /** 重置密码为 123456（重置后旧 token 全部失效：tokenVersion +1） */
+    /**
+     * 重置密码为 123456（重置后旧 token 全部失效：tokenVersion +1）。
+     * 调用逻辑：AccountController.resetPassword → accountService.resetPassword：教秘在账号管理页对指定账号点击重置，将密码重置为 123456 并 tokenVersion+1，前端刷新列表。
+     * 为什么：重置即强制回收账号控制权——tokenVersion+1 让该账号已签发的所有旧 JWT 立即失效，账号本人必须用新密码重新登录。
+     */
     public void resetPassword(String userType, Long id) {
         checkAdmin();
         if ("STAFF".equals(userType)) {
@@ -155,6 +162,10 @@ public class AccountService {
     /**
      * 自助修改本人密码：校验旧密码后更新为新密码密文，并递增 token 版本号吊销旧 token。
      * 学生/教师/管理员均可调用；admin 走教职工表（与登录路由一致）。
+     * 事务：密码密文与 token 版本号须同库原子更新，任一步失败整体回滚，
+     * 防止出现"密码已改但旧 token 未吊销"的中间态。
+     * 调用逻辑：AccountController.changePassword → accountService.changePassword：登录用户在个人中心提交旧/新密码，校验通过后更新密文并 tokenVersion+1，前端提示重新登录。
+     * 为什么：改密后 tokenVersion+1 使旧 JWT 签名全部失效（吊销旧令牌），防止改密前泄露的 token 继续可用；事务保证密文与版本号原子更新，杜绝"密码已改但旧 token 未吊销"的中间态。
      */
     @Transactional
     public void changePassword(String oldPassword, String newPassword) {
@@ -195,7 +206,11 @@ public class AccountService {
         }
     }
 
-    /** 编辑账号信息（学号/工号与角色不可修改） */
+    /**
+     * 编辑账号信息（学号/工号与角色不可修改）。
+     * 调用逻辑：AccountController.update → accountService.updateAccount：教秘在账号编辑页提交姓名/联系方式/专业班级等资料，保存后前端刷新列表。
+     * 为什么：学号/工号与角色是账号唯一标识，禁止修改以保护既有选课/成绩记录与登录身份的关联关系；编辑不涉及凭证变更，无需递增 tokenVersion。
+     */
     public void updateAccount(String userType, Long id, AccountUpdateDTO dto) {
         checkAdmin();
         // 编辑仅允许改姓名/联系方式/专业班级等个人信息；学号/工号与角色作为账号唯一标识不可修改，
@@ -223,7 +238,11 @@ public class AccountService {
         }
     }
 
-    /** 冻结/启用账号（状态变更后递增 token 版本号，吊销该账号所有旧 token） */
+    /**
+     * 冻结/启用账号（状态变更后递增 token 版本号，吊销该账号所有旧 token）。
+     * 调用逻辑：AccountController.updateStatus → accountService.toggleStatus：教秘在账号管理页冻结/启用账号，先校验状态枚举合法性再更新 status 并 tokenVersion+1，前端刷新列表。
+     * 为什么：FROZEN/SUSPENDED 状态由登录/选课等流程检查拦截，同时 tokenVersion+1 吊销已签发旧 token，做到"冻结即下线"；先校验状态枚举防脏数据入库。
+     */
     public void toggleStatus(String userType, Long id, String status) {
         checkAdmin();
         // 账号状态机：ENABLED(正常)/FROZEN(冻结，不可登录与选课)/SUSPENDED(休学，不可选课)；
@@ -287,8 +306,9 @@ public class AccountService {
     }
 
     /**
-     * 批量导入学生：学号留空自动生成，初始密码为随机 8 位（随导入结果返回，供线下分发）
-     * 先整体校验，存在错误则整批不导入并返回错误明细
+     * 批量导入学生：学号留空自动生成，初始密码为随机 8 位（随导入结果返回，供线下分发）。
+     * 先整体校验，存在错误则整批不导入并返回错误明细。
+     * 事务：全部行校验通过后统一插入，任一行失败整批回滚，杜绝"部分导入成功"的脏数据。
      */
     @Transactional
     public List<AccountImportResultVO> importStudents(MultipartFile file) {
@@ -378,6 +398,7 @@ public class AccountService {
     /**
      * 批量导入教职工：工号留空自动生成，初始密码为随机 8 位（随导入结果返回，供线下分发）。
      * 安全限制：导入仅支持 TEACHER，不允许通过导入创建 ADMIN 账号（管理员必须在系统内人工创建）。
+     * 事务：全部行校验通过后统一插入，任一行失败整批回滚，杜绝"部分导入成功"的脏数据。
      */
     @Transactional
     public List<AccountImportResultVO> importStaffs(MultipartFile file) {

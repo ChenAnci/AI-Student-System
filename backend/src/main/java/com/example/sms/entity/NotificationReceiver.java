@@ -8,7 +8,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 通知接收明细实体（一对多：一条通知对应多个学生）
+ * 通知接收明细实体，对应数据库表 notification_receiver（一对多：一条通知对应多个学生）
  */
 @Data
 @TableName("notification_receiver")
@@ -29,5 +29,6 @@ public class NotificationReceiver {
     // 已读时间：标记已读时写入，可支撑"已读回执"类统计
     private LocalDateTime readAt;
 
+    /** 创建时间（接收时间），批量插入时由数据库 NOW() 填充 */
     private LocalDateTime createdAt;
 }

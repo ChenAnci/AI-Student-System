@@ -75,6 +75,7 @@ class AiBodySizeFilterTest {
 
     @Test
     @DisplayName("Content-Length 超限：直接 413，不进入后续链")
+    /** 验证场景：带 Content-Length 的请求体超过上限时直接返回 413，且不进入后续过滤器链 */
     void contentLengthOverLimit_shouldReject() throws Exception {
         MockHttpServletRequest req = requestWithLength("{\"message\":\"" + "A".repeat(100 * 1024) + "\"}");
         MockHttpServletResponse resp = new MockHttpServletResponse();
@@ -88,6 +89,7 @@ class AiBodySizeFilterTest {
 
     @Test
     @DisplayName("chunked 超限（无 Content-Length 但实际字节数超限）：读取时截断返回 413")
+    /** 验证场景：chunked（无 Content-Length）请求实际字节数超限时，按实际读取截断并返回 413 */
     void chunkedOverLimit_shouldRejectByActualRead() throws Exception {
         HttpServletRequest req = chunkedRequest("{\"message\":\"" + "A".repeat(100 * 1024) + "\"}");
         MockHttpServletResponse resp = new MockHttpServletResponse();
@@ -101,6 +103,7 @@ class AiBodySizeFilterTest {
 
     @Test
     @DisplayName("合法小请求：正常放行到后续链（body 被缓存重建供下游读取）")
+    /** 验证场景：合法的较小请求正常放行，且 body 被缓存重建后下游可再次读取 */
     void smallBody_shouldPassThrough() throws Exception {
         MockHttpServletRequest req = requestWithLength("{\"message\":\"hi\"}");
         MockHttpServletResponse resp = new MockHttpServletResponse();
@@ -117,6 +120,7 @@ class AiBodySizeFilterTest {
 
     @Test
     @DisplayName("非 /api/ai/chat 路径：不拦截")
+    /** 验证场景：非 /api/ai/chat 路径的请求不被限流拦截，原样放行 */
     void otherPath_shouldPassThrough() throws Exception {
         MockHttpServletRequest req = requestWithLength("{\"a\":\"" + "A".repeat(100 * 1024) + "\"}");
         req.setRequestURI("/api/courses");

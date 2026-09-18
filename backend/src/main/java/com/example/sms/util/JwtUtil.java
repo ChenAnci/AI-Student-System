@@ -20,14 +20,26 @@ import java.util.Map;
 @Component
 public class JwtUtil {
 
+    /** 签名密钥（来自配置 jwt.secret，生产环境须通过环境变量 JWT_SECRET 注入） */
     @Value("${jwt.secret}")
     private String secret;
 
+    /** Token 有效期（小时，来自配置 jwt.expire-hours） */
     @Value("${jwt.expire-hours}")
     private long expireHours;
 
+    /** 由密钥派生出的 HS256 签名 Key，init() 时构建，签发与校验共用 */
     private Key key;
 
+    /**
+     * 初始化签名密钥：校验密钥非空、强度足够且非已泄露默认值，任何一项不满足都启动失败（fail-fast）
+     *
+     * 调用逻辑：Spring 容器启动时由 @PostConstruct 自动调用（依赖注入完成后、接收任何请求之前），
+     * 生成全应用共用的 HS256 签名 Key，供后续 generateToken / parseToken 使用。
+     * 为什么：JWT 是签名凭证，密钥一旦泄露，攻击者可自签任意身份 Token 直接提权为管理员；
+     * 因此强制密钥来自环境变量、拒绝空值/弱密钥/已泄露默认值并 fail-fast——宁可系统起不来，
+     * 也不允许带着可被伪造的弱密钥运行。
+     */
     @PostConstruct
     public void init() {
         // 安全加固：密钥必须来自环境变量，禁止空值 / 弱密钥 / 已知泄露的默认密钥。
@@ -47,6 +59,14 @@ public class JwtUtil {
 
     /**
      * 生成 Token
+     *
+     * 调用逻辑：AuthController.login 校验账号密码成功后签发，管理员重置密码 / 禁用账号 / 改角色后再次签发；
+     * 一次签发随登录响应返回前端，前端存入本地并在后续请求头 Authorization 中携带。
+     * 为什么：
+     * 1) 选 HS256 对称签名：JDK / 库内直接实现、性能开销小，适合"单后端签发 + 校验"场景；
+     * 2) tokenVersion 参与签名声明：签发时写入当前版本，拦截器验签后再与数据库版本比对，
+     *    改密 / 禁用 / 改角色后版本 +1，旧 token 立即失效，实现"无状态吊销"，无需维护服务端黑名单；
+     * 3) claims 只放身份与角色等非敏感信息（不含密码、邮箱），降低 Token 泄露时的信息暴露面。
      *
      * @param userId       用户ID
      * @param userNo       工号/学号
@@ -77,6 +97,13 @@ public class JwtUtil {
 
     /**
      * 解析 Token，失败返回 null
+     *
+     * 调用逻辑：JwtInterceptor.preHandle 在每个请求进入 Controller 前调用本方法完成验签与过期校验，
+     * 解析成功后把 userId / roleType 等写入 UserContext 供 Service 层读取；解析失败按"未认证"处理
+     * （白名单接口跳过校验，受保护接口返回 401）。
+     * 为什么返回 null 而非抛异常：
+     * 1) 不向调用方 / 攻击者区分"签名不符 / 已过期 / 格式非法"等具体失败原因，避免暴露校验细节；
+     * 2) 异常被吞掉不会穿透到 GlobalExceptionHandler 产生 500，统一由拦截器按未登录处理，语义更清晰。
      */
     public Claims parseToken(String token) {
         try {

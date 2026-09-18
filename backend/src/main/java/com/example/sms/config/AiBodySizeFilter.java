@@ -31,9 +31,17 @@ public class AiBodySizeFilter implements Filter {
     /** 与 AI 侧字段上限（message 500 + history 20×2000 字符）匹配的宽松上限：64KB。 */
     private static final long MAX_BODY_BYTES = 64L * 1024;
 
+    /**
+     * 调用逻辑：Servlet 过滤器，由 Servlet 容器在请求体到达 Controller 之前调用，位于拦截器更前一层；
+     * 仅对 /api/ai/chat 生效：Content-Length 预检 → 流式读取按实际字节截断 → 用缓存请求体重建流后交给过滤器链。
+     * 为什么：Tomcat maxPostSize 只约束表单、管不住 JSON body，故自行双重限制——
+     * Content-Length 预检可在不读 body 时直接 413；chunked 等无 Content-Length 的传输也能按实际读取字节数拦截，
+     * 防止超大请求体占满内存（防内存 DoS）。
+     */
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
+        // 仅拦截 /api/ai/chat 请求：其它接口不做请求体体积限制，直接放行
         if (!(request instanceof HttpServletRequest httpReq)
                 || !httpReq.getRequestURI().startsWith("/api/ai/chat")) {
             chain.doFilter(request, response);

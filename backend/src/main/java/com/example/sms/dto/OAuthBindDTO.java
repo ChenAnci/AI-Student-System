@@ -16,6 +16,7 @@ public class OAuthBindDTO {
     @NotBlank(message = "密码不能为空")
     private String password;
 
+    /** GitHub 唯一用户 id（来自 OAuth 回调，用于与现有账号绑定） */
     @NotBlank(message = "绑定凭证缺失")
     private String providerUid;
 }

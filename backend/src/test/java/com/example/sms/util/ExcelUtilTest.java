@@ -63,6 +63,7 @@ class ExcelUtilTest {
 
     @Test
     @DisplayName("读取：正确返回行号并跳过空行")
+    /** 验证场景：读取 Excel 时返回真实行号（第 2、4 行），并跳过中间的空行 */
     void readWithRowNumbers_shouldReturnRowsWithRealRowNumbers() throws IOException {
         List<ExcelUtil.RowItem<StudentExcelRow>> items =
                 ExcelUtil.readWithRowNumbers(xlsxFile(xlsxWithBlankRow(), "students.xlsx"), StudentExcelRow.class);
@@ -77,6 +78,7 @@ class ExcelUtilTest {
 
     @Test
     @DisplayName("读取：仅表头时返回空列表")
+    /** 验证场景：Excel 只有表头没有数据行时，读取结果为空列表 */
     void readWithRowNumbers_shouldReturnEmptyWhenOnlyHeader() throws IOException {
         try (XSSFWorkbook wb = new XSSFWorkbook()) {
             var sheet = wb.createSheet("Sheet1");
@@ -95,6 +97,7 @@ class ExcelUtilTest {
 
     @Test
     @DisplayName("读取：空文件被拒绝")
+    /** 验证场景：上传空文件时被拒绝并给出"请选择要上传的 Excel 文件"提示 */
     void readWithRowNumbers_shouldRejectEmptyFile() {
         assertThatThrownBy(() -> ExcelUtil.readWithRowNumbers(
                 new MockMultipartFile("file", "students.xlsx", "application/octet-stream", new byte[0]),
@@ -105,6 +108,7 @@ class ExcelUtilTest {
 
     @Test
     @DisplayName("读取：非 Excel 扩展名被拒绝")
+    /** 验证场景：上传非 .xlsx/.xls 扩展名的文件时被拒绝 */
     void readWithRowNumbers_shouldRejectNonExcelExtension() {
         MockMultipartFile txt = new MockMultipartFile("file", "students.txt", "text/plain",
                 "hello".getBytes());
@@ -115,6 +119,7 @@ class ExcelUtilTest {
 
     @Test
     @DisplayName("导出：设置响应头并生成可解析的 xlsx")
+    /** 验证场景：导出时正确设置 ContentType 与下载文件名响应头，且生成的 xlsx 内容可回读解析 */
     void write_shouldSetHeadersAndWriteValidXlsx() {
         List<StudentExcelRow> rows = List.of(buildStudent("S20230001", "张三"));
         ExcelUtil.write(response, "学生列表", StudentExcelRow.class, rows);

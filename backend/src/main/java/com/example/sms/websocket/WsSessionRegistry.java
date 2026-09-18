@@ -21,13 +21,16 @@ import java.util.concurrent.CopyOnWriteArraySet;
 @Component
 public class WsSessionRegistry {
 
+    /** 在线会话表：userId → 该用户的全部在线会话集合 */
     private final ConcurrentHashMap<Long, CopyOnWriteArraySet<WebSocketSession>> sessions = new ConcurrentHashMap<>();
 
+    /** 注册一个在线会话（同一用户多标签页会各自独立注册） */
     public void add(Long userId, WebSocketSession session) {
         // computeIfAbsent 原子创建集合：两个连接同时首次建立时不会互相覆盖，也避免先 get 再 put 的竞态
         sessions.computeIfAbsent(userId, k -> new CopyOnWriteArraySet<>()).add(session);
     }
 
+    /** 移除某个会话；该用户最后一个会话断开时一并清理外层 key */
     public void remove(Long userId, WebSocketSession session) {
         Set<WebSocketSession> set = sessions.get(userId);
         if (set == null) return;

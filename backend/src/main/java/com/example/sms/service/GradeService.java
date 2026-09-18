@@ -178,6 +178,7 @@ public class GradeService {
         return toUpdate.size();
     }
 
+    /** 合法成绩标记：NORMAL(正常)/DEFER(缓考)/ABSENT(缺考)/CHEAT(作弊)；仅 NORMAL 记录分数 */
     private static final Set<String> VALID_MARKS = new HashSet<>(java.util.Arrays.asList(
             "NORMAL", "DEFER", "ABSENT", "CHEAT"));
 
@@ -215,7 +216,11 @@ public class GradeService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    /** 教师：录入/更新成绩（仅 DRAFT 阶段可改） */
+    /**
+     * 教师：录入/更新成绩（仅 DRAFT 阶段可改）。
+     * 调用逻辑：GradeController.entry → gradeService.entryGrades：教师在成绩录入页保存成绩明细（逐条校验选课关系/标记/分数范围），仅 DRAFT 状态可改，更新 student_course 的 score/mark。
+     * 为什么：状态机第一环——成绩只在 DRAFT 阶段可录入修改，一旦提交进入审批流即锁定，防止已审核成绩被事后篡改。
+     */
     @Transactional
     public void entryGrades(GradeEntryDTO dto) {
         if (dto.getItems() == null || dto.getItems().isEmpty()) {
@@ -251,7 +256,11 @@ public class GradeService {
         auditMapper.updateById(audit);
     }
 
-    /** 教师：提交成绩（SUBMITTED，锁定 score） */
+    /**
+     * 教师：提交成绩（SUBMITTED，锁定 score）。
+     * 调用逻辑：GradeController.submit → gradeService.submitGrades：教师确认成绩无误后点击提交，审核记录 DRAFT → SUBMITTED 并记录 submittedAt，前端刷新审核状态。
+     * 为什么：提交即把成绩锁定送审（score 不再可改），DRAFT → SUBMITTED 单向推进，保证教秘审核的是教师最终确认的成绩，防止审核前被反复改动。
+     */
     @Transactional
     public void submitGrades(Long courseId) {
         Course course = checkTeacherCourse(courseId);
@@ -288,6 +297,7 @@ public class GradeService {
         return toAuditVO(audits);
     }
 
+    /** 审核记录 -> 视图：批量带出课程信息与授课教师姓名，避免逐条查库 */
     private List<AuditVO> toAuditVO(List<CourseGradeAudit> audits) {
         if (audits.isEmpty()) return Collections.emptyList();
         List<Long> courseIds = audits.stream().map(CourseGradeAudit::getCourseId).collect(Collectors.toList());
@@ -315,7 +325,11 @@ public class GradeService {
         }).collect(Collectors.toList());
     }
 
-    /** 教秘：审核通过/退回 */
+    /**
+     * 教秘：审核通过/退回。
+     * 调用逻辑：GradeController.audit → gradeService.audit：教秘在待审核列表对 SUBMITTED 成绩审核——通过置 APPROVED 并记录 approvedAt；退回回置 DRAFT 且必须填写原因，教师修正后可重新提交；前端刷新待审列表。
+     * 为什么：SUBMITTED → APPROVED / → DRAFT 的状态迁移强制审核结论留痕（approvedAt / rejectReason），退回原因必填保证教师可定位修改；非 SUBMITTED 状态不可审核，防止重复处理。
+     */
     @Transactional
     public void audit(AuditDTO dto) {
         if (!"ADMIN".equals(UserContext.getRole())) {
@@ -345,6 +359,8 @@ public class GradeService {
      * 1. 审核表状态 -> PUBLISHED，记录 published_at
      * 2. 遍历选课记录：score >= 60 且 NORMAL 累加学分
      * 3. 重算学生 GPA
+     * 调用逻辑：GradeController.publish → gradeService.publish：教秘对 APPROVED 成绩点击发布，事务内置审核表 PUBLISHED → 逐学生重算已修学分与 GPA → 发送成绩发布通知；前端刷新后成绩对学生可见、选退课被锁定。
+     * 为什么：仅 APPROVED 可发布（跳过审核直接发布视为越权），发布后成绩定论并计入学分/GPA；按学生维度整体重算保证多门课先后发布互不影响、口径一致；整个发布在同一事务内原子完成。
      */
     @Transactional
     public void publish(Long courseId) {
@@ -426,6 +442,7 @@ public class GradeService {
         resetCredits(student, totalCredits, gpa);
     }
 
+    /** 重算结果的统一落库入口：更新学生已修学分与 GPA */
     private void resetCredits(Student student, BigDecimal credits, BigDecimal gpa) {
         student.setTotalEarnedCredits(credits);
         student.setGpa(gpa);
@@ -443,7 +460,11 @@ public class GradeService {
         return BigDecimal.ZERO;
     }
 
-    /** 学生：成绩单 */
+    /**
+     * 学生：成绩单。
+     * 调用逻辑：GradeController.myGrades → gradeService.myGrades：学生在成绩单页加载，按本人选课记录关联课程与审核状态，仅 PUBLISHED 的成绩返回 score/mark，前端渲染成绩单与单科绩点。
+     * 为什么：未发布/审核中的成绩不向学生泄露（score、mark、绩点置空），防止教师改分期间学生看到波动数据；已发布才展示通过与否与单科绩点，与学业仪表盘口径一致。
+     */
     public List<GradeVO> myGrades(Long studentId) {
         List<StudentCourse> scs = studentCourseMapper.selectList(new LambdaQueryWrapper<StudentCourse>()
                 .eq(StudentCourse::getStudentId, studentId)
@@ -487,6 +508,7 @@ public class GradeService {
                 ? student.getRequiredCredits() : BigDecimal.ZERO;
         BigDecimal earned = student != null && student.getTotalEarnedCredits() != null
                 ? student.getTotalEarnedCredits() : BigDecimal.ZERO;
+        // 学业进度 = 已修学分 / 毕业要求学分 × 100%，保留 1 位小数；要求学分为 0 时进度按 0 处理
         BigDecimal progress = required.compareTo(BigDecimal.ZERO) > 0
                 ? earned.divide(required, 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
                     .setScale(1, RoundingMode.HALF_UP)
@@ -510,6 +532,7 @@ public class GradeService {
         return course;
     }
 
+    /** 成绩是否已锁定：非 DRAFT（已提交/审核/发布）即锁定，教师不可再改分 */
     private boolean isScoreLocked(Long courseId) {
         CourseGradeAudit audit = auditMapper.selectOne(new LambdaQueryWrapper<CourseGradeAudit>()
                 .eq(CourseGradeAudit::getCourseId, courseId));

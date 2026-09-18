@@ -18,6 +18,7 @@ import org.springframework.web.socket.server.standard.ServletServerContainerFact
 @EnableWebSocket
 public class WebSocketConfig implements WebSocketConfigurer {
 
+    // 通知 WebSocket 处理器：负责连接建立后的 AUTH 认证与消息推送
     @Autowired
     private NotificationWebSocketHandler notificationWebSocketHandler;
 

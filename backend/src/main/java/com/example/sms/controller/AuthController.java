@@ -25,6 +25,7 @@ public class AuthController {
     @Autowired
     private AuthService authService;
 
+    /** 登录：按工号/学号 + 密码校验，成功返回用户信息与 token（@Valid 先校验入参非空/格式） */
     @ApiOperation("登录（工号/学号 + 密码）")
     @PostMapping("/login")
     public Result<LoginResponse> login(@Valid @RequestBody LoginDTO dto) {

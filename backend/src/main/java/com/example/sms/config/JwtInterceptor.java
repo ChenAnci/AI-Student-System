@@ -30,6 +30,7 @@ public class JwtInterceptor implements HandlerInterceptor {
     @Autowired
     private StudentMapper studentMapper;
 
+    // Ant 通配路径匹配器：用于将请求 URI 与 ROLE_RULES 中的路径规则做模式比对
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
 
     /**
@@ -71,6 +72,13 @@ public class JwtInterceptor implements HandlerInterceptor {
             {"/api/notifications/**",           "STUDENT"},
     };
 
+    /**
+     * 调用逻辑：Spring MVC 拦截器，每个受保护的请求在进入 Controller 之前由框架调用本方法，
+     * 执行顺序为：放行 OPTIONS 预检 → 解析 Bearer Token → tokenVersion 吊销检查 → 写入 UserContext → 按路径+角色规则鉴权；
+     * 全部通过才继续放行到 Controller，否则直接写 401/403 并中断请求链。
+     * 为什么：采用 fail-closed 规则表——未在 ROLE_RULES 登记的新接口默认 403，宁可误伤也不放开，防止漏配角色造成越权；
+     * 令牌版本吊销（改密/禁用/改角色后 token_version +1）可在不等待 Token 过期的情况下立即作废已泄露/已窃取的旧令牌。
+     */
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         // 放行预检请求：浏览器跨域时会先发 OPTIONS 预检（无 Authorization 头），
@@ -160,6 +168,11 @@ public class JwtInterceptor implements HandlerInterceptor {
         }
     }
 
+    /**
+     * 调用逻辑：请求处理链（Controller 执行完毕、响应返回后）由 Spring MVC 回调，业务成功或抛异常都会执行；
+     * 此处统一清理 preHandle 中写入的 UserContext（ThreadLocal）。
+     * 为什么：Servlet 容器线程池会复用线程，若不清理 ThreadLocal，下一个请求（甚至未登录请求）可能读到上一个用户的身份，造成串号/越权。
+     */
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         // 请求处理完毕必须清理 ThreadLocal：Servlet 容器线程池会复用线程，

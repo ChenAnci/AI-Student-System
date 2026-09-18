@@ -13,9 +13,11 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 
+    // 注入 JWT 鉴权拦截器：负责登录校验与角色-路径权限（fail-closed）
     @Autowired
     private JwtInterceptor jwtInterceptor;
 
+    // 注入登录接口 IP 限流拦截器：防止暴力刷登录接口
     @Autowired
     private RateLimitInterceptor rateLimitInterceptor;
 
@@ -23,6 +25,12 @@ public class WebConfig implements WebMvcConfigurer {
     @Value("${knife4j.enable:false}")
     private boolean knife4jEnabled;
 
+    /**
+     * 调用逻辑：Spring 启动阶段由框架回调本方法，一次性注册 JWT 鉴权拦截器与登录限流拦截器及其排除路径，
+     * 注册完成后对后续所有请求生效（每次请求都会经过已注册拦截器链）。
+     * 为什么：采用"默认拦截、显式放行"策略——登录、OAuth 回调、favicon 等公开路径放行，
+     * 其余业务接口全部走鉴权（fail-closed，漏配即 403）；文档路径仅在 knife4j 开启时放行，避免生产环境接口文档裸奔。
+     */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         // JWT 拦截器覆盖全部 /api/**（业务接口）+ 文档路径。

@@ -53,6 +53,8 @@ public class AuthService {
     /**
      * 登录：学号（S 开头）查学生表，工号查教职工表；带失败锁定保护。
      * 锁定键统一小写规范化，防止利用 MySQL 大小写不敏感排序规则以大小写变体绕过锁定。
+     * 调用逻辑：AuthController.login → authService.login → guardedLogin（失败锁定检查 → 账号限流 → 密码比对 + ENABLED 校验）→ 签发含 tokenVersion 的 JWT，前端保存后随请求头访问受保护接口。
+     * 为什么：账号不存在与密码错误统一提示"账号或密码错误"防账号枚举；Redis 计数锁定 + 限流防暴力破解；JWT 携带 tokenVersion 参与签名，改密/冻结时可整体吊销旧令牌。
      */
     public LoginResponse login(LoginDTO dto) {
         return guardedLogin(dto.getUsername().trim(), dto.getPassword());
@@ -167,6 +169,7 @@ public class AuthService {
         if (!"ENABLED".equals(staff.getStatus())) {
             throw new BusinessException("账号已被停用或冻结，请联系教学秘书");
         }
+        // token 携带 tokenVersion 参与签名：改密/重置/冻结时版本号递增，旧 token 立即全部失效（吊销）
         LoginResponse resp = new LoginResponse();
         resp.setUserId(staff.getId());
         resp.setUserNo(staff.getStaffNo());
@@ -189,6 +192,7 @@ public class AuthService {
         if (!"ENABLED".equals(student.getStatus())) {
             throw new BusinessException("账号已被停用或冻结，请联系教学秘书");
         }
+        // 与教职工一致：token 携带 tokenVersion 参与签名，改密/重置/冻结后旧 token 全部失效（吊销）
         LoginResponse resp = new LoginResponse();
         resp.setUserId(student.getId());
         resp.setUserNo(student.getStudentNo());
@@ -207,6 +211,8 @@ public class AuthService {
     /**
      * 校验账号密码并签发（供 OAuth 绑定场景复用）。
      * 与 login 走同一登录守卫：锁定 + 限流 + ENABLED 状态校验，防止绑定接口被暴力破解 / 冻结账号绕过。
+     * 调用逻辑：OAuthController.bind → githubOAuthService.bind → authService.verifyAndLogin：先校验账号密码再建立 OAuth 绑定关系，成功后返回的 JWT 即绑定登录态。
+     * 为什么：复用 login 的同一登录守卫，避免 OAuth 绑定接口成为绕过锁定/限流的暴力破解入口；同时保证绑定操作确由账号本人发起。
      */
     public LoginResponse verifyAndLogin(String username, String password) {
         return guardedLogin(username.trim(), password);
@@ -214,6 +220,8 @@ public class AuthService {
 
     /**
      * 按工号/学号直接签发（OAuth 已绑定账号，绑定关系建立时已校验存在与启用）。
+     * 调用逻辑：GithubOAuthService.handleCallback 在 GitHub 用户已绑定系统账号时调用：按绑定关系中的 userNo 路由学生/教职工表，直接签发 JWT 登录态，再经一次性授权码回传前端换取。
+     * 为什么：OAuth 登录免密直接放行，但内部仍校验账号存在且 ENABLED，防止账号被删/停用后通过已绑定关系继续放行；响应组装复用 buildStudentResponse/buildStaffResponse 与常规登录保持一致。
      */
     public LoginResponse issueByUserNo(String userNo) {
         if (userNo.toUpperCase().startsWith("S") && !userNo.equalsIgnoreCase("admin")) {
@@ -232,6 +240,7 @@ public class AuthService {
         return buildStaffResponse(st);
     }
 
+    /** 组装教职工登录响应（OAuth 直接签发复用，与 loginStaff 的响应构建逻辑一致） */
     private LoginResponse buildStaffResponse(Staff staff) {
         LoginResponse resp = new LoginResponse();
         resp.setUserId(staff.getId());
@@ -244,6 +253,7 @@ public class AuthService {
         return resp;
     }
 
+    /** 组装学生登录响应（OAuth 直接签发复用，与 loginStudent 的响应构建逻辑一致） */
     private LoginResponse buildStudentResponse(Student student) {
         LoginResponse resp = new LoginResponse();
         resp.setUserId(student.getId());

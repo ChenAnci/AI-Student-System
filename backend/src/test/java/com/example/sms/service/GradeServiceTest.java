@@ -75,6 +75,7 @@ class GradeServiceTest {
     @BeforeEach
     void setUp() {
         UserContext.set(adminUser());
+        // 课程授课教师固定为 2L，便于配合管理员/教师身份用例
         course.setTeacherId(2L);
     }
 
@@ -115,6 +116,7 @@ class GradeServiceTest {
         return s;
     }
 
+    /** 用 EasyExcel 把成绩行数组写成 multipart 上传文件 */
     private MockMultipartFile gradeFile(GradeExcelRow... rows) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         EasyExcel.write(out, GradeExcelRow.class).sheet("Sheet1").doWrite(Arrays.asList(rows));
@@ -122,6 +124,7 @@ class GradeServiceTest {
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out.toByteArray());
     }
 
+    /** 构造一行成绩导入数据：学号 + 分数（可空）+ 标记 */
     private GradeExcelRow gradeRow(String no, String score, String mark) {
         GradeExcelRow row = new GradeExcelRow();
         row.setStudentNo(no);
@@ -141,6 +144,7 @@ class GradeServiceTest {
 
     @Test
     @DisplayName("成绩导入：NORMAL 写分数，DEFER 清空分数")
+    /** 验证场景：成绩导入时 NORMAL 标记写入分数，DEFER 标记清空分数，两条选课记录均被更新 */
     void importGrades_shouldApplyScoreAndMark() {
         mockCourseWithEnrolledStudents();
         CourseGradeAudit audit = new CourseGradeAudit();
@@ -154,6 +158,7 @@ class GradeServiceTest {
         assertThat(count).isEqualTo(2);
         assertThat(sc1.getScore()).isEqualByComparingTo("88");
         assertThat(sc1.getMark()).isEqualTo("NORMAL");
+        // DEFER 标记的记录分数被清空
         assertThat(sc2.getScore()).isNull();
         assertThat(sc2.getMark()).isEqualTo("DEFER");
         verify(studentCourseMapper, times(2)).updateById(any(StudentCourse.class));
@@ -161,6 +166,7 @@ class GradeServiceTest {
 
     @Test
     @DisplayName("成绩导入：未选修该课程的学号报错")
+    /** 验证场景：导入的学号不在该课程选课名单中时抛业务异常 */
     void importGrades_shouldRejectStudentNotEnrolled() {
         mockCourseWithEnrolledStudents();
         CourseGradeAudit audit = new CourseGradeAudit();
@@ -175,6 +181,7 @@ class GradeServiceTest {
 
     @Test
     @DisplayName("成绩导入：非法标记报错")
+    /** 验证场景：成绩标记不是 NORMAL/DEFER（如 FOO）时抛业务异常 */
     void importGrades_shouldRejectInvalidMark() {
         mockCourseWithEnrolledStudents();
         CourseGradeAudit audit = new CourseGradeAudit();
@@ -189,6 +196,7 @@ class GradeServiceTest {
 
     @Test
     @DisplayName("成绩导入：分数超出 0-100 报错")
+    /** 验证场景：成绩分数超出 0-100 范围时抛业务异常 */
     void importGrades_shouldRejectScoreOutOfRange() {
         mockCourseWithEnrolledStudents();
         CourseGradeAudit audit = new CourseGradeAudit();
@@ -203,6 +211,7 @@ class GradeServiceTest {
 
     @Test
     @DisplayName("成绩导入：正常标记但缺分数报错")
+    /** 验证场景：标记为 NORMAL 但未填写分数时抛业务异常 */
     void importGrades_shouldRequireScoreWhenNormal() {
         mockCourseWithEnrolledStudents();
         CourseGradeAudit audit = new CourseGradeAudit();
@@ -217,6 +226,7 @@ class GradeServiceTest {
 
     @Test
     @DisplayName("成绩导入：非 DRAFT 阶段拒绝导入")
+    /** 验证场景：成绩审核状态不是 DRAFT（如已提交）时拒绝导入 */
     void importGrades_shouldRejectWhenLocked() {
         when(courseMapper.selectById(1L)).thenReturn(course);
         CourseGradeAudit audit = new CourseGradeAudit();
@@ -233,6 +243,7 @@ class GradeServiceTest {
 
     @Test
     @DisplayName("成绩模板：预填选课学生，分数清空标记为 NORMAL")
+    /** 验证场景：下载成绩模板时预填该课程选课学生，分数留空、标记默认 NORMAL */
     void downloadGradeTemplate_shouldPreFillStudents() {
         mockCourseWithEnrolledStudents();
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -250,6 +261,7 @@ class GradeServiceTest {
 
     @Test
     @DisplayName("成绩导出：包含当前已录成绩")
+    /** 验证场景：导出课程学生成绩时包含当前已录入的分数与标记 */
     void exportCourseStudents_shouldContainScores() {
         sc1.setScore(new BigDecimal("88"));
         sc2.setScore(new BigDecimal("45"));
@@ -270,6 +282,7 @@ class GradeServiceTest {
 
     @Test
     @DisplayName("成绩发布：自动发送 GRADE_PUBLISH 通知给该课程选课学生")
+    /** 验证场景：成绩发布时自动向该课程全部选课学生发送 GRADE_PUBLISH 通知，并更新审核状态 */
     void publish_shouldNotifyEnrolledStudents() {
         course.setId(1L);
         course.setCourseName("Web前端开发");
@@ -292,6 +305,7 @@ class GradeServiceTest {
 
     @Test
     @DisplayName("成绩发布：未审核通过（非 APPROVED）不可发布，不发送通知")
+    /** 验证场景：审核状态非 APPROVED 时不可发布成绩，且不发送任何通知 */
     void publish_shouldRejectWhenNotApproved() {
         course.setId(1L);
         when(courseMapper.selectById(1L)).thenReturn(course);
@@ -306,6 +320,7 @@ class GradeServiceTest {
 
     // ==================== 成绩单（未发布成绩不泄露） ====================
 
+    /** 装配"我的成绩单"查询：一条选课记录 + 对应课程 + 指定审核状态 */
     private void mockMyGrades(StudentCourse sc, String auditStatus) {
         when(studentCourseMapper.selectList(any())).thenReturn(List.of(sc));
         when(courseMapper.selectBatchIds(any())).thenReturn(List.of(course));
@@ -317,6 +332,7 @@ class GradeServiceTest {
 
     @Test
     @DisplayName("成绩单：已发布课程正常返回分数与绩点")
+    /** 验证场景：已发布课程的成绩单正常返回分数、绩点与是否通过 */
     void myGrades_shouldReturnPublishedScore() {
         StudentCourse sc = buildSc(10L, 1L);
         sc.setScore(new BigDecimal("88"));
@@ -327,12 +343,14 @@ class GradeServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getScore()).isEqualByComparingTo("88");
+        // 88 分对应绩点 3.0，判定为通过
         assertThat(result.get(0).getGradePoint()).isEqualByComparingTo("3.0");
         assertThat(result.get(0).getPassed()).isTrue();
     }
 
     @Test
     @DisplayName("成绩单：未发布课程分数/绩点置空，不向学生泄露")
+    /** 验证场景：未发布课程的成绩单隐藏分数与绩点（置空），防止提前泄露 */
     void myGrades_shouldMaskScoreWhenNotPublished() {
         StudentCourse sc = buildSc(10L, 1L);
         sc.setScore(new BigDecimal("88"));

@@ -21,6 +21,7 @@ public class CourseCardVO {
     private String location;
     private Integer capacity;
     private Integer currentEnrolled;
+    /** 课程状态：UNPUBLISHED 未发布 | PUBLISHED 已发布 */
     private String status;
     /** 当前学生是否已选 */
     private Boolean enrolled;

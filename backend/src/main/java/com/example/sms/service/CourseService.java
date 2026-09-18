@@ -29,7 +29,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 课程管理服务
+ * 课程管理服务：课程创建/编辑/发布/删除（含 UNPUBLISHED -> PUBLISHED 单向状态机、
+ * 教师归属权限校验）、教师端"我的课程"、教秘全部课程、选课中心已发布课程列表（Redis 缓存 30s）
  */
 @Service
 public class CourseService {
@@ -49,11 +50,16 @@ public class CourseService {
     @Autowired
     private NotificationService notificationService;
 
+    /** 当前用户是否为教学秘书（ADMIN） */
     private boolean isAdmin() {
         return "ADMIN".equals(UserContext.getRole());
     }
 
-    /** 教师创建课程（默认 UNPUBLISHED） */
+    /**
+     * 教师创建课程（默认 UNPUBLISHED）。
+     * 调用逻辑：CourseController.create → courseService.createCourse：教师/教秘在课程管理页提交课程表单（教秘必须指定授课教师、教师强制归属自己），以 UNPUBLISHED 落库并返回，前端刷新"我的课程/全部课程"列表。
+     * 为什么：新课程统一未发布状态，未发布前学生不可见、不可选；授课教师归属在创建时即锁定，防止教师替他人建课或课程无人认领。
+     */
     public Course createCourse(CourseFormDTO dto) {
         Course course = new Course();
         BeanUtils.copyProperties(dto, course);
@@ -74,7 +80,11 @@ public class CourseService {
         return course;
     }
 
-    /** 编辑课程：未发布可全量编辑；已发布仅允许调课（修改上课时间/地点），其余字段强制保留，变化时通知选课学生 */
+    /**
+     * 编辑课程：未发布可全量编辑；已发布仅允许调课（修改上课时间/地点），其余字段强制保留，变化时通知选课学生。
+     * 调用逻辑：CourseController.update → courseService.updateCourse：编辑页提交后先经 getEditableCourse 校验归属（教秘可改全部、教师仅限自己名下），已发布课程仅写 schedule/location，若有变化则调 notificationService.sendSystem 通知选课学生，前端刷新课程列表。
+     * 为什么：发布后课程基本信息进入锁定态，只允许调课以保持选课/成绩流程口径稳定；调课通知让学生及时知晓时间地点变更，避免到错教室上课。
+     */
     public void updateCourse(Long id, CourseFormDTO dto) {
         Course course = getEditableCourse(id);
         if ("PUBLISHED".equals(course.getStatus())) {
@@ -108,6 +118,7 @@ public class CourseService {
         course.setSchedule(dto.getSchedule());
         course.setLocation(dto.getLocation());
         course.setCapacity(dto.getCapacity());
+        // 未发布状态下，仅教秘可重新指定授课教师（教师编辑时不允许更换课程归属）
         if (isAdmin() && dto.getTeacherId() != null) {
             course.setTeacherId(requireValidTeacher(dto.getTeacherId()).getId());
         }
@@ -123,7 +134,11 @@ public class CourseService {
         return teacher;
     }
 
-    /** 发布课程（锁定） */
+    /**
+     * 发布课程（锁定）。
+     * 调用逻辑：CourseController.publish → courseService.publishCourse：教师/教秘在课程管理页点击发布，UNPUBLISHED → PUBLISHED 后课程进入选课中心可见，前端刷新课程列表。
+     * 为什么：发布是单向状态机且不可逆——发布即锁定课程基本信息与删除路径，后续选课、成绩录入审核都以稳定口径进行；已发布再次发布直接拒绝。
+     */
     public void publishCourse(Long id) {
         Course course = getEditableCourse(id);
         // 发布是单向状态机：UNPUBLISHED -> PUBLISHED 后即"锁定"，
@@ -135,7 +150,11 @@ public class CourseService {
         courseMapper.updateById(course);
     }
 
-    /** 删除课程（仅未发布；有选课记录也不可删除） */
+    /**
+     * 删除课程（仅未发布；有选课记录也不可删除）。
+     * 调用逻辑：CourseController.delete → courseService.deleteCourse：删除前校验课程未发布且无选课记录，事务内先删该课程的草稿成绩审核记录再删课程，前端刷新列表。
+     * 为什么：已发布/有选课记录的课程删除会造成选课与成绩数据孤儿，故禁止；事务内显式清理 DRAFT 审核行，避免外键约束（fk_audit_course）阻止删除路径。
+     */
     @Transactional
     public void deleteCourse(Long id) {
         Course course = getEditableCourse(id);
@@ -188,6 +207,7 @@ public class CourseService {
         return toMyCourseVO(courseMapper.selectList(wrapper));
     }
 
+    /** 课程列表 -> 教师端/教秘端视图：批量带出成绩审核状态与授课教师姓名，避免逐条查库 */
     private List<MyCourseVO> toMyCourseVO(List<Course> courses) {
         if (courses.isEmpty()) return Collections.emptyList();
         Map<Long, String> auditMap = auditMapper.selectList(

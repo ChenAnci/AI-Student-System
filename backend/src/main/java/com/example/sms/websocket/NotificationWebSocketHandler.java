@@ -32,6 +32,7 @@ public class NotificationWebSocketHandler extends TextWebSocketHandler {
     /** 未认证被关闭的状态码（前端据此停止重连） */
     public static final CloseStatus UNAUTHORIZED = new CloseStatus(4401, "unauthorized");
 
+    // 定时关闭未认证连接的单线程调度器（守护线程，不阻塞应用退出）
     private static final ScheduledExecutorService AUTH_TIMEOUT =
             Executors.newSingleThreadScheduledExecutor(r -> {
                 Thread t = new Thread(r, "ws-auth-timeout");
@@ -39,15 +40,21 @@ public class NotificationWebSocketHandler extends TextWebSocketHandler {
                 return t;
             });
 
+    /** 在线会话注册表：负责会话的增删与消息推送 */
     @Autowired
     private WsSessionRegistry registry;
 
+    /** JWT 工具：解析首条 AUTH 消息中的 token 完成身份认证 */
     @Autowired
     private JwtUtil jwtUtil;
 
+    /** JSON 解析：解析客户端上行的文本帧 */
     @Autowired
     private ObjectMapper objectMapper;
 
+    /**
+     * 连接建立：不立即注册会话，而是调度一个定时任务——若在 AUTH_TIMEOUT_MS 内未完成认证则主动关闭
+     */
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
         // 会话空闲超时（S-3）由 WebSocketConfig 的 ServletServerContainerFactoryBean 统一配置（60s）：
@@ -65,6 +72,9 @@ public class NotificationWebSocketHandler extends TextWebSocketHandler {
         }, AUTH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     }
 
+    /**
+     * 文本消息处理：未认证阶段仅接受 AUTH 认证帧；已认证阶段仅响应心跳 PING/PONG
+     */
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         JsonNode node;
@@ -107,6 +117,9 @@ public class NotificationWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    /**
+     * 连接关闭（正常/异常/超时被关）：从在线会话表摘除该会话，避免向失效连接推送
+     */
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         // 无论正常关闭还是被超时/4401 关闭，都从在线表中摘除该会话，防止向已失效连接重复推送
@@ -114,6 +127,9 @@ public class NotificationWebSocketHandler extends TextWebSocketHandler {
         if (raw instanceof Long) registry.remove((Long) raw, session);
     }
 
+    /**
+     * 传输层异常（如异常断网）：清理在线表残留会话并尝试按未认证语义关闭
+     */
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) {
         // 传输层异常（如客户端异常断网、网络闪断）：主动从在线表清理，避免"半死会话"残留在推送循环里
@@ -123,6 +139,7 @@ public class NotificationWebSocketHandler extends TextWebSocketHandler {
         closeUnauthorized(session);
     }
 
+    /** 以 4401 状态码关闭会话（若仍处于打开状态） */
     private void closeUnauthorized(WebSocketSession session) {
         try {
             if (session.isOpen()) session.close(UNAUTHORIZED);
@@ -131,6 +148,7 @@ public class NotificationWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    /** 向会话发送 JSON 文本帧；会话已关闭则静默忽略 */
     private void sendJson(WebSocketSession session, String json) {
         try {
             if (session.isOpen()) session.sendMessage(new TextMessage(json));

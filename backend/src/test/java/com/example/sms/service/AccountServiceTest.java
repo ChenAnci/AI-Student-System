@@ -55,6 +55,7 @@ class AccountServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 默认以管理员身份执行用例；需要其他身份的方法会先 clear 再自行切换
         UserContext.set(adminUser());
     }
 
@@ -125,6 +126,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("学生导入：学号留空自动生成并递增")
+    /** 验证场景：学生导入时学号留空，自动按当前最大学号递增生成（S20230004、S20230005），且默认状态/学分/初始密码正确 */
     void importStudents_shouldAutoGenerateStudentNo() {
         // 连续两次查询最大学号：首次为 S20230003，插入后第二次应看到 S20230004
         when(studentMapper.selectList(any()))
@@ -150,6 +152,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("学生导入：指定学号且不冲突时按原学号入库")
+    /** 验证场景：学生导入时指定学号且库中不存在该学号，则按原学号与姓名入库 */
     void importStudents_shouldKeepProvidedStudentNo() {
         when(studentMapper.selectCount(any())).thenReturn(0L);
 
@@ -165,6 +168,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("学生导入：文件内学号重复报错且不落库")
+    /** 验证场景：同一导入文件内学号重复时抛业务异常，且任何记录都不落库 */
     void importStudents_shouldRejectDuplicateNoInFile() {
         when(studentMapper.selectCount(any())).thenReturn(0L);
 
@@ -179,6 +183,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("学生导入：学号已存在于数据库时报错")
+    /** 验证场景：学号已存在于数据库时抛业务异常，且不执行插入 */
     void importStudents_shouldRejectExistingNo() {
         when(studentMapper.selectCount(any())).thenReturn(1L);
 
@@ -192,6 +197,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("学生导入：姓名为空报错")
+    /** 验证场景：学生姓名为空（空白字符）时抛业务异常 */
     void importStudents_shouldRejectBlankName() {
         assertThatThrownBy(() -> accountService.importStudents(
                 studentFile(studentRow("   ", "S20230099"))))
@@ -201,6 +207,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("学生导入：教师无权限（403）")
+    /** 验证场景：非管理员（教师身份）执行学生导入被拒绝，提示仅教学秘书可操作 */
     void importStudents_shouldRejectNonAdmin() {
         UserContext.clear();
         UserContext.set(teacherUser());
@@ -215,6 +222,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("教职工导入：角色留空默认教师，工号自动生成")
+    /** 验证场景：教职工导入时角色留空默认 TEACHER，工号按当前最大学号自动递增（T1003），默认启用 */
     void importStaffs_shouldDefaultRoleAndAutoGenerateNo() {
         Staff max = new Staff();
         max.setStaffNo("T1002");
@@ -234,6 +242,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("教职工导入：非法角色报错")
+    /** 验证场景：教职工导入时填入了非法的角色值（如 BOSS）被拒绝 */
     void importStaffs_shouldRejectInvalidRole() {
         assertThatThrownBy(() -> accountService.importStaffs(
                 staffFile(staffRow("测试教师甲", null, "BOSS"))))
@@ -243,6 +252,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("教职工导入：禁止通过导入创建管理员")
+    /** 验证场景：导入文件中出现 ADMIN 角色时被拒绝，防止通过导入提权 */
     void importStaffs_shouldRejectAdminRole() {
         assertThatThrownBy(() -> accountService.importStaffs(
                 staffFile(staffRow("管理员甲", null, "ADMIN"))))
@@ -252,6 +262,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("教职工导入：同批次多个空工号依次递增不重复")
+    /** 验证场景：同批次多个空工号依次递增生成（T1003、T1004），互不重复 */
     void importStaffs_shouldGenerateDistinctNosInBatch() {
         Staff max = new Staff();
         max.setStaffNo("T1002");
@@ -269,6 +280,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("教职工导入：工号已存在报错")
+    /** 验证场景：教职工工号已存在于数据库时抛业务异常 */
     void importStaffs_shouldRejectExistingNo() {
         when(staffMapper.selectCount(any())).thenReturn(1L);
 
@@ -282,6 +294,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("导出学生：响应头正确且内容可解析")
+    /** 验证场景：导出学生生成合法 Excel，响应头含下载文件名，内容可回读解析 */
     void exportStudents_shouldWriteValidExcel() {
         when(studentMapper.selectList(any())).thenReturn(Arrays.asList(
                 student("S20230001", "张三"),
@@ -300,6 +313,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("导出教职工：内容可解析")
+    /** 验证场景：导出教职工生成可解析的 Excel，包含工号/姓名/角色等信息 */
     void exportStaffs_shouldWriteValidExcel() {
         Staff s = new Staff();
         s.setStaffNo("T1001");
@@ -320,6 +334,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("学生模板：仅表头无数据行")
+    /** 验证场景：下载学生导入模板仅含表头，不含任何数据行 */
     void downloadStudentTemplate_shouldWriteHeaderOnly() {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -332,6 +347,7 @@ class AccountServiceTest {
 
     // ==================== 自助修改密码 ====================
 
+    /** 构造带 BCrypt 密码密文与令牌版本的学生实体（id=64L，对应学生身份用例） */
     private Student studentWithPassword(String password) {
         Student s = new Student();
         s.setId(64L);
@@ -341,6 +357,7 @@ class AccountServiceTest {
         return s;
     }
 
+    /** 构造带 BCrypt 密码密文与令牌版本的教职工实体（id=2L，对应教师身份用例） */
     private Staff staffWithPassword(String password) {
         Staff s = new Staff();
         s.setId(2L);
@@ -352,6 +369,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("修改密码：学生旧密码正确时更新为新密码密文并递增令牌版本")
+    /** 验证场景：学生旧密码校验通过后更新为新密码密文，令牌版本递增使旧 token 立即失效 */
     void changePassword_shouldUpdateStudentHashWhenOldPasswordCorrect() {
         UserContext.clear();
         UserContext.set(studentUser());
@@ -374,6 +392,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("修改密码：教师旧密码正确时更新为新密码密文并递增令牌版本")
+    /** 验证场景：教师旧密码校验通过后更新为新密码密文，令牌版本递增使旧 token 立即失效 */
     void changePassword_shouldUpdateStaffHashWhenOldPasswordCorrect() {
         UserContext.clear();
         UserContext.set(teacherUser());
@@ -390,6 +409,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("管理员重置密码：学生令牌版本递增，旧 token 失效")
+    /** 验证场景：管理员重置学生密码后令牌版本递增，学生旧 token 全部失效 */
     void resetPassword_shouldIncrementStudentTokenVersion() {
         Student stu = studentWithPassword("oldPass123");
         when(studentMapper.selectById(64L)).thenReturn(stu);
@@ -403,6 +423,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("冻结/启用账号：令牌版本递增，旧 token 失效")
+    /** 验证场景：管理员冻结账号时状态更新为 FROZEN，且令牌版本递增使旧 token 立即失效 */
     void toggleStatus_shouldIncrementTokenVersion() {
         UserContext.clear();
         UserContext.set(adminUser());
@@ -419,6 +440,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("修改密码：旧密码错误时拒绝且不更新")
+    /** 验证场景：旧密码错误时拒绝改密并抛出业务异常，数据库不做任何更新 */
     void changePassword_shouldRejectWhenOldPasswordWrong() {
         UserContext.clear();
         UserContext.set(studentUser());
@@ -433,6 +455,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("修改密码：账号不存在时拒绝")
+    /** 验证场景：当前账号在数据库中不存在时拒绝改密，且不执行更新 */
     void changePassword_shouldRejectWhenAccountMissing() {
         UserContext.clear();
         UserContext.set(studentUser());
@@ -447,6 +470,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("修改密码：新密码与旧密码相同时拒绝")
+    /** 验证场景：新密码与旧密码相同（未发生变化）时拒绝改密 */
     void changePassword_shouldRejectWhenNewEqualsOld() {
         UserContext.clear();
         UserContext.set(studentUser());
@@ -461,6 +485,7 @@ class AccountServiceTest {
 
     @Test
     @DisplayName("修改密码：新密码强度不足（过短）时拒绝")
+    /** 验证场景：新密码强度不足（长度过短）时拒绝改密，强度校验先于查库执行 */
     void changePassword_shouldRejectWeakNewPassword() {
         UserContext.clear();
         UserContext.set(studentUser());

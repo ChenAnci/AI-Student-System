@@ -59,6 +59,7 @@ class CourseServiceTest {
         UserContext.clear();
     }
 
+    /** 切换到管理员登录上下文 */
     private void adminContext() {
         UserContext.CurrentUser u = new UserContext.CurrentUser();
         u.setUserId(2L);
@@ -68,6 +69,7 @@ class CourseServiceTest {
         UserContext.set(u);
     }
 
+    /** 切换到指定 userId 的教师登录上下文 */
     private void teacherContext(Long userId) {
         UserContext.CurrentUser u = new UserContext.CurrentUser();
         u.setUserId(userId);
@@ -77,6 +79,7 @@ class CourseServiceTest {
         UserContext.set(u);
     }
 
+    /** 构造一个已发布、由教师 2L 授课的课程 */
     private Course publishedCourse() {
         Course c = new Course();
         c.setId(1L);
@@ -92,6 +95,7 @@ class CourseServiceTest {
         return c;
     }
 
+    /** 构造调课表单 DTO：传入新的上课时间与地点，其余字段故意设为与原课程不同的值（用于校验强制保留） */
     private CourseFormDTO dto(String schedule, String location) {
         CourseFormDTO d = new CourseFormDTO();
         d.setCourseCode("OTHER");

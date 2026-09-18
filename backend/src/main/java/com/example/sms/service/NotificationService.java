@@ -63,7 +63,11 @@ public class NotificationService {
 
     // ===== 发送 =====
 
-    /** 手动发送（发送者取自 UserContext，老师仅可发给自己的课程学生） */
+    /**
+     * 手动发送（发送者取自 UserContext，老师仅可发给自己的课程学生）。
+     * 调用逻辑：NotificationController.send → notificationService.send：教师/教秘在发通知页选择接收范围提交，内部 resolveTargets 解析接收人 → doSend 先落库 notification 主表 + receivers 接收明细（批量插入）→ 事务提交后（afterCommit）经 WebSocket 推送给在线学生。
+     * 为什么：先落库后推送——消息可靠性以落库为准，WebSocket 推送失败只记日志不影响发送结果，离线学生刷新收件箱即可补拉；教师仅限按自己的课程发送，防止绕过前端越权群发。
+     */
     @Transactional
     public void send(SendNotificationDTO dto) {
         UserContext.CurrentUser user = UserContext.get();

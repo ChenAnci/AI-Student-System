@@ -8,7 +8,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 站内通知主表实体
+ * 站内通知主表实体，对应数据库表 notification：一条通知一条记录，接收人展开在通知接收明细表
  */
 @Data
 @TableName("notification")
@@ -23,6 +23,7 @@ public class Notification {
     // 标题/正文冗余存储于主表：每条接收明细不再复制内容，查询收件箱时按 notification_id 关联主表取内容
     private String title;
 
+    /** 通知正文内容 */
     private String content;
 
     /** ADMIN | TEACHER | SYSTEM */

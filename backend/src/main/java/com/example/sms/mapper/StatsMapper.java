@@ -8,6 +8,10 @@ import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
+/**
+ * 统计查询 Mapper（只读聚合，不继承 BaseMapper）：
+ * 供首页卡片（学生/教职工/课程/选课数）、各维度分布图（专业/院系/课程状态/分数段）与教师端成绩统计使用
+ */
 @Mapper
 public interface StatsMapper {
 

@@ -9,7 +9,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 教职工实体
+ * 教职工实体，对应数据库表 staff：教职工账号（工号登录）、角色（管理员/教师）与所属院系
  */
 @Data
 @TableName("staff")
@@ -43,7 +43,9 @@ public class Staff {
     /** 手机号 */
     private String phone;
 
+    /** 创建时间 */
     private LocalDateTime createdAt;
 
+    /** 更新时间 */
     private LocalDateTime updatedAt;
 }

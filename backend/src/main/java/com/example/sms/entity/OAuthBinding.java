@@ -8,7 +8,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * OAuth 登录绑定关系（GitHub 账号 ↔ 系统工号/学号）
+ * OAuth 登录绑定关系，对应数据库表 oauth_binding（GitHub 账号 ↔ 系统工号/学号）
  */
 @Data
 @TableName("oauth_binding")
@@ -26,7 +26,9 @@ public class OAuthBinding {
     /** GitHub 用户唯一 id */
     private String providerUid;
 
+    /** 绑定创建时间 */
     private LocalDateTime createdAt;
 
+    /** 绑定更新时间 */
     private LocalDateTime updatedAt;
 }

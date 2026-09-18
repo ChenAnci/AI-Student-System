@@ -45,6 +45,7 @@ class EnrollServiceTest {
     @InjectMocks
     private EnrollService enrollService;
 
+    /** 构造一个已发布、未满员（30 人中已选 5 人）的课程 */
     private Course publishedCourse() {
         Course c = new Course();
         c.setId(1L);
@@ -121,6 +122,7 @@ class EnrollServiceTest {
         com.example.sms.util.UserContext.CurrentUser u = new com.example.sms.util.UserContext.CurrentUser();
         u.setUserId(2L);
         u.setRoleType("ADMIN");
+        // 以管理员（教学秘书）身份代学生选课，结束后清理登录上下文
         com.example.sms.util.UserContext.set(u);
         try {
             enrollService.adminEnroll(10L, 1L);

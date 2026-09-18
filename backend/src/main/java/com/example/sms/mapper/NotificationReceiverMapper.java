@@ -8,6 +8,9 @@ import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
+/**
+ * 通知接收明细表 Mapper：对应数据库表 notification_receiver，负责接收明细的查询与批量写入
+ */
 @Mapper
 public interface NotificationReceiverMapper extends BaseMapper<NotificationReceiver> {
 

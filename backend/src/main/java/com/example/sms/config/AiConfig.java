@@ -11,6 +11,10 @@ import org.springframework.web.client.RestTemplate;
 @Configuration
 public class AiConfig {
 
+    /**
+     * 专用 RestTemplate Bean：供 AI 服务接口转发调用。
+     * 连接 5s 超时快速失败；读超时 60s 兜底 LLM 生成耗时，避免 AI 慢响应长期占用 Tomcat 线程。
+     */
     @Bean
     public RestTemplate aiRestTemplate() {
         // 专用 RestTemplate：连接 5s 超时快速失败；读超时 60s 兜底 LLM 生成耗时，
