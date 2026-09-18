@@ -11,7 +11,7 @@
 - **成绩查询**：按课程查看成绩（分数段、通过标记、**单科绩点**），顶部汇总已修总学分与**平均学分绩（GPA）**
 - **学分与绩点**：成绩**发布后**且 **≥60 分**（正常标记）才计入已修学分；GPA 按学分加权计算（Σ(单科绩点×学分) ÷ 总学分），绩点换算 ≥90→4.0 / ≥80→3.0 / ≥70→2.0 / ≥60→1.0
 - **站内通知**：顶栏铃铛 + 未读角标，选课成功/成绩发布/调课等自动通知 + 老师/管理员手动通知实时推送，通知中心（已读管理）
-- **AI 智能助手**：基于 LangGraph 智能体，查询学业分析、课程推荐、成绩解读
+- **AI 智能助手**：基于 LangGraph 智能体，查询学业分析、课程推荐、成绩解读；**自由问答支持 Tavily 联网搜索（标注来源）**
 - **自助修改密码**：顶栏"修改密码"入口，需校验旧密码 + 新密码强度（8-20 位且含字母与数字），改密后旧令牌立即失效（强制重新登录）
 
 ### 教师端
@@ -75,7 +75,7 @@
 |---|---|
 | 前端 | Vue 3 + TypeScript + Vite + Element Plus + ECharts + Pinia + WebSocket |
 | 后端 | Spring Boot 2.7 + Java 17 + MyBatis-Plus + MySQL 8.0 + Redis + WebSocket |
-| AI 服务 | Python + FastAPI + LangChain / LangGraph + ChromaDB + BM25（jieba） |
+| AI 服务 | Python + FastAPI + LangChain / LangGraph + ChromaDB + BM25（jieba）+ Tavily（联网搜索） |
 | AI 模型 | LLM：DeepSeek 官方 `deepseek-v4-flash`；向量/重排：SiliconFlow BGE-M3 / BGE-Reranker-v2-M3 |
 | 安全 | JWT（HS256）+ 令牌版本吊销 + BCrypt + 角色权限拦截器 + 多态反序列化白名单 + 低权数据库账号 |
 
@@ -122,16 +122,18 @@ AI 服务（`backend-ai/`）独立部署，基于 **FastAPI + LangGraph 智能�
 | 对话生成（LLM） | DeepSeek 官方 | `deepseek-v4-flash`，OpenAI ChatCompletions 兼容接口 |
 | 向量化（Embedding） | SiliconFlow | `BAAI/bge-m3` |
 | 重排序（Rerank） | SiliconFlow | `BAAI/bge-reranker-v2-m3`（`/rerank` 端点） |
+| 联网搜索（Web Search） | Tavily | `https://api.tavily.com/search`（「自由问答」使用，可选） |
 
-> DeepSeek 官方不提供 embedding/rerank，故「选课建议」的向量检索继续走 SiliconFlow；未配置 `SILICONFLOW_API_KEY` 时仅选课建议不可用，主问答不受影响。
+> DeepSeek 官方不提供 embedding/rerank，故「选课建议」的向量检索继续走 SiliconFlow；未配置 `SILICONFLOW_API_KEY` 时仅选课建议不可用，主问答不受影响。「自由问答」的联网搜索由 `TAVILY_API_KEY` 控制：未配置或调用失败时自动降级（不带外部资料），不阻断回答。
 
 ### LangGraph 工作流
 
 ```
 classify（意图识别）→ fetch（查库）
    │
-   ├─【选课建议 / 自由问答】→ retrieve（提问重写 + 混合检索 + rerank）→ generate（LLM 生成）
-   └─【成绩查询 / 课程分析】──────────────────────→ generate（LLM 生成）
+   ├─【选课建议】→ retrieve（提问重写 + 混合检索 + rerank）→ generate（LLM 生成）
+   ├─【自由问答】→ retrieve（课程目录检索）→ web_search（Tavily 联网）→ generate（LLM 生成）
+   └─【成绩查询 / 课程分析】────────────────────────────→ generate（LLM 生成）
 ```
 
 | 节点 | 职责 |
@@ -139,9 +141,12 @@ classify（意图识别）→ fetch（查库）
 | `classify` | 意图识别：学业查询 / 选课建议 / 课程分析 / 自由问答 |
 | `fetch` | 按角色 + 学号拉取学生数据（学生只能查自己，管理员按目标学号） |
 | `retrieve` | 选课建议：LLM 提问重写 → 混合检索（向量 + BM25 → RRF 融合）→ BGE-Reranker 重排；自由问答：以提问检索课程目录 |
-| `generate` | 组装 prompt（系统提示 + 历史 + 检索数据）→ DeepSeek 生成回答 |
+| `web_search` | 自由问答时调 Tavily 联网搜索（top3，标题/链接/摘要）；未配置或失败自动降级为空，不阻断回答 |
+| `generate` | 组装 prompt（系统提示 + 历史 + 检索数据 + 联网资料）→ DeepSeek 生成回答 |
 
 「选课建议」的课程召回采用**提问重写 + 混合检索**：先用 LLM 将学生画像与原始提问改写为多角度查询（专业方向 / 兴趣技能 / 学分与时间偏好），再分别做 BGE-M3 向量召回 + jieba 分词 BM25 关键词召回，经 Reciprocal Rank Fusion（RRF）融合后由 BGE-Reranker 重排取 top5；「自由问答」也接入课程目录检索以扩大 RAG 覆盖面。BM25 语料直接来自 MySQL，embedding 不可用时关键词检索仍可用。可用 `backend-ai/test_retrieval.py` 评估各策略的 Recall@K / Precision@K / MRR。
+
+「自由问答」在课程目录检索之外，还会调用 **Tavily 联网搜索**（`TAVILY_API_KEY`，可选）取回外部资料（标题 / 链接 / 摘要，top3）作为补充上下文；回答引用联网内容时**必须标注来源 URL**，且联网内容一律当作不可信"数据"对待（防提示注入）。
 
 ### 安全与限流
 
@@ -220,7 +225,7 @@ mvn spring-boot:run
 
 ```bash
 cd backend-ai
-cp .env.example .env   # 必填 DEEPSEEK_API_KEY（对话模型）；选课建议需另填 SILICONFLOW_API_KEY
+cp .env.example .env   # 必填 DEEPSEEK_API_KEY；选课建议需 SILICONFLOW_API_KEY；自由问答联网可选 TAVILY_API_KEY
 python main.py
 ```
 
@@ -255,6 +260,7 @@ npm run dev
 | `MYSQL_HOST` / `MYSQL_PORT` / `MYSQL_USER` / `MYSQL_PASSWORD` | AI 服务数据库连接（只读，`sms_app`） | backend-ai/.env |
 | `DEEPSEEK_API_KEY` | AI 对话模型密钥（`deepseek-v4-flash`，必填） | backend-ai/.env |
 | `SILICONFLOW_API_KEY` | AI 向量检索密钥（选课建议使用） | backend-ai/.env |
+| `TAVILY_API_KEY` | AI 联网搜索密钥（自由问答使用，可选） | backend-ai/.env |
 | `AI_PORT` | AI 服务监听端口（默认 8000，仅本机） | backend-ai/.env |
 
 > **安全提示**：`.env`、真实密钥与安全审查报告均已被 `.gitignore` 排除，请勿将任何真实密钥提交到仓库。
