@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     siliconflow_api_key: str = ""
     siliconflow_base_url: str = "https://api.siliconflow.cn/v1"
 
+    # ---- Tavily（联网搜索，仅自由问答使用；可选依赖，未配置时联网跳过）----
+    tavily_api_key: str = ""
+
     # ---- 模型 ----
     llm_model: str = "deepseek-v4-flash"
     embedding_model: str = "BAAI/bge-m3"
