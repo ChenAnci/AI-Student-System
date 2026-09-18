@@ -11,10 +11,20 @@ PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 
 
 def _dump(obj) -> str:
+    """把对象序列化为 JSON 字符串（保留中文字符，不转义为 Unicode 转义形式）。
+
+    入参 obj：任意可 JSON 序列化的对象（dict/list 等）。
+    返回：ensure_ascii=False 的 JSON 字符串，便于 LLM 直接阅读中文内容。
+    """
     return json.dumps(obj, ensure_ascii=False)
 
 
 def _build_body(state: AIState) -> str:
+    """按意图组装本轮 LLM 的上下文正文（数据体）。
+
+    入参 state：工作流状态（需含 intent、tool_results、student_profile、retrieved、web_results、query）。
+    返回：拼装好的正文文本，追加在系统提示与历史之后。
+    """
     intent = state["intent"]
     results = state.get("tool_results") or {}
     profile = _dump(state.get("student_profile"))
@@ -53,6 +63,11 @@ def _build_body(state: AIState) -> str:
 
 
 def generate_node(state: AIState) -> AIState:
+    """生成节点：组装消息序列并调用 LLM 产出最终回答，写回 state["answer"]。
+
+    入参 state：工作流状态（含 error、history、query 及各节点产出数据）。
+    返回：更新 answer 后的同一 state。
+    """
     # 前置节点已置 error（权限拒绝/学生不存在/未指定目标）：不再调 LLM，
     # 直接回显前置节点写好的错误提示（answer），避免把错误状态当正常问题去生成回答。
     if state.get("error"):

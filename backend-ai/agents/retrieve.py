@@ -9,6 +9,11 @@ from models.state import AIState
 
 
 def _profile_text(state: AIState) -> str:
+    """把学生画像与成绩信息压缩成一段自然语言文本（供提问重写作输入信号）。
+
+    入参 state：工作流状态（含 student_profile、tool_results.grades）。
+    返回：拼接好的画像文本（含已修课程、未通过课程）。
+    """
     # 把结构化画像/成绩压缩成一段自然语言文本，作为提问重写的输入信号。
     # 从成绩单里拆出"已修课程"与"未通过课程"：这俩是选课建议最关键的约束条件
     # （避免推荐已修/挂科相关的课），单独拼进画像让改写模型看得到。
@@ -24,6 +29,11 @@ def _profile_text(state: AIState) -> str:
 
 
 def retrieve_node(state: AIState) -> AIState:
+    """检索节点：改写/构造查询 → 混合检索 → 跨查询去重合并，结果写回 state["retrieved"]。
+
+    入参 state：工作流状态（含 intent、query、student_profile、tool_results）。
+    返回：写入 retrieved（最多 5 条）后的同一 state。
+    """
     # 任一前置节点已置 error，直接短路返回。
     if state.get("error"):
         return state

@@ -7,15 +7,24 @@ import agents.websearch as ws
 
 
 class FakeResponse:
+    """mock httpx 响应：固定返回预设的 JSON payload，可模拟指定 HTTP 状态码。"""
+
     def __init__(self, payload, status_code=200):
+        """构造 mock 响应。
+
+        入参 payload：json() 返回的预设数据。
+        入参 status_code：模拟的 HTTP 状态码（>=400 时 raise_for_status 抛错）。
+        """
         self._payload = payload
         self._status = status_code
 
     def raise_for_status(self):
+        """状态码 >= 400 时抛异常，模拟 httpx 的非 2xx 报错行为。"""
         if self._status >= 400:
             raise RuntimeError(f"HTTP {self._status}")
 
     def json(self):
+        """返回预设的 JSON 数据。"""
         return self._payload
 
 
@@ -23,15 +32,21 @@ class FakeClient:
     """mock httpx：只实现 post(url, json=None, timeout=None)，记录调用参数。"""
 
     def __init__(self, response):
+        """构造 mock 客户端。
+
+        入参 response：每次 post 都返回的预设响应对象。
+        """
         self.response = response
         self.calls = []
 
     def post(self, url, json=None, timeout=None):
+        """记录本次调用参数并返回预设响应（入参同 httpx.Client.post）。"""
         self.calls.append({"url": url, "json": json, "timeout": timeout})
         return self.response
 
 
 def test_parses_results_and_truncates_to_3():
+    """tavily_search：正确解析 results 并截断为最多 MAX_RESULTS=3 条，请求参数符合约定。"""
     payload = {"results": [
         {"title": f"t{i}", "url": f"https://e{i}.com", "content": f"c{i}"} for i in range(5)
     ]}
@@ -47,6 +62,7 @@ def test_parses_results_and_truncates_to_3():
 
 
 def test_node_failure_degrades_to_empty():
+    """web_search_node：Tavily 返回 500 时降级为空列表，不阻断工作流。"""
     state = {"error": None, "intent": "FREE_QA", "query": "x", "web_results": None}
     client = FakeClient(FakeResponse({}, status_code=500))
     out = ws.web_search_node(state, client=client)
@@ -55,6 +71,7 @@ def test_node_failure_degrades_to_empty():
 
 
 def test_node_skips_for_non_free_qa():
+    """web_search_node：非 FREE_QA 意图（如 QUERY_STUDY）不触发联网搜索。"""
     state = {"error": None, "intent": "QUERY_STUDY", "query": "查成绩", "web_results": None}
     client = FakeClient(FakeResponse({"results": []}))
     out = ws.web_search_node(state, client=client)
@@ -63,6 +80,7 @@ def test_node_skips_for_non_free_qa():
 
 
 def test_node_skips_when_key_missing():
+    """web_search_node：TAVILY_API_KEY 未配置时跳过联网搜索，不发起请求。"""
     state = {"error": None, "intent": "FREE_QA", "query": "x", "web_results": None}
     client = FakeClient(FakeResponse({"results": []}))
     old = ws.settings.tavily_api_key

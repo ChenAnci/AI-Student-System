@@ -22,6 +22,11 @@ _KEYWORD_RULES = [
 # 关键词兜底规则表：LLM 分类失败时按"命中关键词"粗判意图。
 # 规则顺序即优先级（先选课、再成绩、后分析），命中任意关键词即返回，全部未命中归为自由问答。
 def _fallback(query: str) -> str:
+    """关键词兜底意图分类（LLM 不可用或输出不合规时降级使用）。
+
+    入参 query：用户原始提问文本。
+    返回：兜底判定的意图字符串（COURSE_RECOMMEND / QUERY_STUDY / COURSE_ANALYSIS / FREE_QA）。
+    """
     for kws, intent in _KEYWORD_RULES:
         if any(k in query for k in kws):
             return intent
@@ -29,6 +34,11 @@ def _fallback(query: str) -> str:
 
 
 def intent_node(state: AIState) -> AIState:
+    """意图识别节点：优先用 LLM 分类，失败时关键词兜底，结果写回 state["intent"]。
+
+    入参 state：工作流状态（含 query，必要时含 error）。
+    返回：写入 intent / target_course 后的同一 state。
+    """
     # 任一前置节点已置 error（如 fetch 阶段权限拒绝），直接短路返回，不再消耗 LLM。
     if state.get("error"):
         return state

@@ -10,6 +10,11 @@ from models.state import AIState
 
 
 def _resolve_target_no(state: AIState) -> str | None:
+    """确定本次要查询的学生学号：学生锁本人，管理员取页面选择或从提问中提取。
+
+    入参 state：工作流状态（含 role、user_no、target_no、query）。
+    返回：目标学号；无法确定时返回 None。
+    """
     # 决定"本次要查哪个学生的数据"：
     # - 学生：强制锁定为令牌里的自己（user_no），无论请求里传了什么学号都无效；
     # - 管理员：优先用页面传入的 target_no，没传则从提问中正则提取 S 开头学号。
@@ -24,6 +29,11 @@ def _resolve_target_no(state: AIState) -> str | None:
 
 
 def query_node(state: AIState) -> AIState:
+    """数据查询节点：确定目标学号 → 越权校验 → 拉取学生数据，结果写回 tool_results。
+
+    入参 state：工作流状态（含 role、user_no、target_no、query、intent）。
+    返回：写入 student_profile / tool_results 或置 error / answer 后的同一 state。
+    """
     # 任一前置节点已置 error，直接短路返回。
     if state.get("error"):
         return state

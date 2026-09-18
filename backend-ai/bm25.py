@@ -24,6 +24,13 @@ class BM25Index:
     """课程文档语料的 BM25 索引。ids 使用与 Chroma 一致的字符串 course_id。"""
 
     def __init__(self, docs: list[str], ids: list[str], metadatas: list[dict]):
+        """构建 BM25 索引：对文档语料做 jieba 分词并预计算词频统计。
+
+        入参 docs：课程文档文本列表（与向量库共用同一份语料格式）。
+        入参 ids：与 docs 一一对应的文档 ID（字符串 course_id）。
+        入参 metadatas：与 docs 一一对应的元数据列表。
+        异常：docs 为空时抛出 ValueError。
+        """
         if not docs:
             raise ValueError("BM25 语料为空")
         self.docs = docs

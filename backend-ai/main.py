@@ -27,6 +27,10 @@ logger = logging.getLogger("sms-ai")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    """FastAPI 生命周期钩子：服务启动时同步课程向量库，关闭时清理。
+
+    入参 _：FastAPI 应用实例（此处用不到，仅占位）。
+    """
     # 启动时同步一次课程向量库（把 MySQL 中的已发布课程向量化写入 Chroma + 重建 BM25），
     # 保证服务上线即具备检索能力，无需等到第一次提问才初始化。
     try:
@@ -93,6 +97,7 @@ async def body_size_limit_middleware(request: Request, call_next):
 
     # 3) 把已读的 body 放回请求对象，供后续 Pydantic 解析使用
     async def replay_body():
+        """重放已读取的请求体：以 ASGI http.request 消息形式一次性回吐给下游。"""
         yield {"type": "http.request", "body": bytes(received), "more_body": False}
 
     request._stream_consumed = True
@@ -102,10 +107,19 @@ async def body_size_limit_middleware(request: Request, call_next):
 
 @app.get("/health")
 def health():
+    """健康检查接口：返回服务存活状态，供负载均衡/探活使用。
+
+    返回：dict，包含 status="ok" 与服务名。
+    """
     return {"status": "ok", "service": "sms-ai"}
 
 
 def _b64url_decode(s: str) -> bytes:
+    """将 Base64URL 字符串解码为原始字节。
+
+    入参 s：JWT 的 header/payload 段（Base64URL 编码，无填充、-/_ 代替 +/）。
+    返回：解码后的原始字节。
+    """
     # JWT 的 header/payload 使用 Base64URL 编码（无填充、-/_ 代替 +/）。
     # 先按 4 字节对齐补齐 "=" 填充位，再转标准 urlsafe_b64decode 还原原始字节。
     pad = "=" * (-len(s) % 4)
@@ -183,6 +197,13 @@ def chat(
     req: ChatRequest,
     authorization: str = Header(default=""),
 ):
+    """学生问答主接口：JWT 验签鉴权 → 按用户限流 → 执行 LangGraph 工作流 → 返回回答。
+
+    入参 req：聊天请求体（问题、历史、目标学生学号等）。
+    入参 authorization：Bearer JWT（由 Spring 后端签发并透传）。
+    返回：ChatResponse，包含最终回答文本。
+    异常：401 认证失败 / 429 触发限流 / 413 请求体过大 / 503 服务内部错误。
+    """
     # 认证三步：必须有 Bearer 前缀 → JWT 验签/过期校验 → 从 claims 取身份与角色。
     # 身份完全来自 Spring 签发的令牌 claims，接口参数与请求头里的学号均不可信，
     # 后续 DB 查询用的学号严格取自已验签的令牌（见 db 层强制绑定）。

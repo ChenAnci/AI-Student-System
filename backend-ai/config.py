@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """服务全局配置：字段与 .env 环境变量一一对应，由 pydantic-settings 自动装载。"""
     # pydantic-settings：字段名大写化后与 .env 中的环境变量一一对应（如 mysql_password ↔ MYSQL_PASSWORD）。
     # env_file 指定读取 backend-ai/.env；extra="ignore" 忽略 .env 里未声明字段，避免多余变量报错。
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

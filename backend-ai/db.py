@@ -11,6 +11,10 @@ from config import settings
 
 @contextmanager
 def _conn() -> Iterator[pymysql.connections.Connection]:
+    """数据库连接上下文管理器：创建短连接、用毕自动关闭。
+
+    返回：pymysql 连接对象（DictCursor，查询结果以 dict 返回）。
+    """
     # 每次操作新建连接、用完即关（上下文管理器）：本服务是低频只读查询，
     # 相比维护连接池，简单起见直接短连接，避免池内连接失效导致的脏读/复用问题。
     conn = pymysql.connect(

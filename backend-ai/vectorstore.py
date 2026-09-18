@@ -15,6 +15,10 @@ _bm25_built = False
 
 
 def _client() -> chromadb.ClientAPI:
+    """创建/复用 ChromaDB 持久化客户端（数据目录由 config.chroma_dir 指定）。
+
+    返回：chromadb 客户端实例。
+    """
     return chromadb.PersistentClient(
         path=settings.chroma_dir,
         settings=ChromaSettings(anonymized_telemetry=False),

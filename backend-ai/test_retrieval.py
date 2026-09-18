@@ -23,6 +23,10 @@ TOPK_DEFAULT = 5
 
 
 def load_courses() -> list[dict]:
+    """加载全部已发布课程作为评估语料。
+
+    返回：已发布课程列表（来自 MySQL，供构造查询与 ground truth 使用）。
+    """
     return db.get_all_published_courses()
 
 
@@ -86,6 +90,7 @@ def evaluate(predict, queries: list[dict], top_k: int) -> dict:
 
 
 def main() -> None:
+    """评估脚本入口：加载语料 → 构造查询 → 对比各检索策略的指标并打印表格。"""
     parser = argparse.ArgumentParser(description="混合检索召回率/准确率评估")
     parser.add_argument("--topk", type=int, default=TOPK_DEFAULT, help="评估 K 值（默认 5）")
     parser.add_argument("--rerank", action="store_true", help="启用 SiliconFlow rerank 评估")

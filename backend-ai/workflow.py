@@ -22,16 +22,30 @@ from models.state import AIState
 #   fetch 阶段通过 SQL 拉取到 tool_results，无需再走检索，直接进 generate 生成回答，
 #   这样可避免无谓的 LLM 改写与向量检索开销（省时省 token）。
 def _route_after_query(state: AIState) -> str:
+    """fetch 之后的意图分流：按意图决定下一步是检索还是直接生成。
+
+    入参 state：工作流状态（需含 intent 字段）。
+    返回："retrieve"（需要 RAG 检索）或 "generate"（直接生成回答）。
+    """
     return "retrieve" if state.get("intent") in ("COURSE_RECOMMEND", "FREE_QA") else "generate"
 
 
 # 检索后的二次路由：FREE_QA 除内库课程检索外，还需联网搜索补充外部资料；
 # 其余意图（COURSE_RECOMMEND）检索完直接生成，不联网。
 def _route_after_retrieve(state: AIState) -> str:
+    """检索之后的二次分流：FREE_QA 意图还需联网搜索，其余直接生成。
+
+    入参 state：工作流状态（需含 intent 字段）。
+    返回："web_search"（联网搜索补充外部资料）或 "generate"（直接生成）。
+    """
     return "web_search" if state.get("intent") == "FREE_QA" else "generate"
 
 
 def build_workflow():
+    """组装并编译 LangGraph 工作流图，返回可调用的 Runnable。
+
+    返回：graph.compile() 的结果，供 FastAPI 层 workflow.invoke(state) 执行。
+    """
     # 用 LangGraph StateGraph 把 4 个节点串成有向图，状态统一为 AIState（TypedDict）。
     graph = StateGraph(AIState)
     # classify：LLM 意图识别；fetch：按角色/学号拉取学生数据（SQL）；
