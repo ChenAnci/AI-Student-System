@@ -38,13 +38,18 @@ def _build_body(state: AIState) -> str:
         )
     # 默认分支（QUERY_STUDY / FREE_QA）：画像 + 成绩单 + 课表 + 检索结果 + 原问题，
     # 覆盖"查成绩/课表/学习情况"和自由问答两类请求。
-    return (
+    body = (
         f"\n## 学生画像\n{profile}\n"
         f"## 成绩单\n{_dump(results.get('grades'))}\n"
         f"## 课表\n{_dump(results.get('schedule'))}\n"
         f"## 检索到的相关课程\n{_dump([r['course_name'] for r in state.get('retrieved', [])])}\n"
         f"## 学生问题\n{state['query']}"
     )
+    # 联网搜索资料仅 FREE_QA 时存在；作为补充上下文，并要求 LLM 标注来源（规则见 system.md）。
+    web = state.get("web_results") or []
+    if web:
+        body += "\n## 联网搜索资料（外部信息，回答引用时须标注来源）\n" + _dump(web)
+    return body
 
 
 def generate_node(state: AIState) -> AIState:
