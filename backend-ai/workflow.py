@@ -10,6 +10,7 @@ from agents.generator import generate_node
 from agents.intent import intent_node
 from agents.retrieve import retrieve_node
 from agents.tools import query_node
+from agents.websearch import web_search_node
 from models.state import AIState
 
 
@@ -24,6 +25,12 @@ def _route_after_query(state: AIState) -> str:
     return "retrieve" if state.get("intent") in ("COURSE_RECOMMEND", "FREE_QA") else "generate"
 
 
+# 检索后的二次路由：FREE_QA 除内库课程检索外，还需联网搜索补充外部资料；
+# 其余意图（COURSE_RECOMMEND）检索完直接生成，不联网。
+def _route_after_retrieve(state: AIState) -> str:
+    return "web_search" if state.get("intent") == "FREE_QA" else "generate"
+
+
 def build_workflow():
     # 用 LangGraph StateGraph 把 4 个节点串成有向图，状态统一为 AIState（TypedDict）。
     graph = StateGraph(AIState)
@@ -32,6 +39,7 @@ def build_workflow():
     graph.add_node("classify", intent_node)
     graph.add_node("fetch", query_node)
     graph.add_node("retrieve", retrieve_node)
+    graph.add_node("web_search", web_search_node)
     graph.add_node("generate", generate_node)
 
     # 固定边：进入先分类，分类后先取数，检索完成后必然生成回答。
@@ -40,7 +48,9 @@ def build_workflow():
     # 唯一的分支点：fetch 之后按意图分流（见 _route_after_query）。
     # 条件边返回字符串，通过映射表落到具体节点，实现"需要检索才走 retrieve"。
     graph.add_conditional_edges("fetch", _route_after_query, {"retrieve": "retrieve", "generate": "generate"})
-    graph.add_edge("retrieve", "generate")
+    # 二次分流：retrieve 之后 FREE_QA 再走 web_search（联网），其余直接生成。
+    graph.add_conditional_edges("retrieve", _route_after_retrieve, {"web_search": "web_search", "generate": "generate"})
+    graph.add_edge("web_search", "generate")
     graph.add_edge("generate", END)
     # compile() 把图定义编译成可调用的 Runnable，供 FastAPI 层 workflow.invoke(state) 执行。
     return graph.compile()
