@@ -6,10 +6,12 @@ import { useUserStore } from '@/stores/user'
 
 /** 站内通知 store：WebSocket 连接管理 + 未读数 + 心跳 + 断线重连 */
 export const useNotificationStore = defineStore('notification', () => {
+  // 对外状态：未读通知数（角标）、WS 连接是否在线、最新一条通知内容
   const unread = ref(0)
   const connected = ref(false)
   const latest = ref<{ title: string; content: string; type: string } | null>(null)
 
+  // 内部连接资源：WS 实例、心跳定时器、重连定时器、连续重连次数（指数退避基数）
   let ws: WebSocket | null = null
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null

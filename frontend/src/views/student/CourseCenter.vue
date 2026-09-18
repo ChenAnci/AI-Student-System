@@ -118,6 +118,12 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * 选课中心（学生）
+ * 职责：展示课程列表卡片，支持按关键词 / 学分范围 / 状态（可选、已满、已选）筛选；
+ *       前端本地计算选课概览统计（已选门数、已获学分、可选余量、课程总数）；
+ *       提供选课、退课操作，并对与已选课程时间冲突的课程做标记并禁用选课按钮。
+ */
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
@@ -196,6 +202,7 @@ const displayCourses = computed<DisplayCourse[]>(() =>
   }))
 )
 
+// 计算课程卡片右上角状态角标：已选 > 已满 > 冲突 > 可选（按优先级返回文案与颜色样式类）
 function cardStatus(c: DisplayCourse): { text: string; tagClass: string } {
   if (c.enrolled) return { text: '已选', tagClass: 'tag-success' }
   if (c.full) return { text: '已满', tagClass: 'tag-danger' }

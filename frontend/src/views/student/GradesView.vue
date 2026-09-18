@@ -64,6 +64,11 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * 成绩单（学生）
+ * 职责：展示当前学生的成绩汇总（已修总学分、平均学分绩 GPA、已修通过课程数）与明细成绩表；
+ *       成绩表按审核状态展示录入中 / 待审核 / 已审核 / 已发布，并处理缓考、缺考、舞弊等特殊标记。
+ */
 import { computed, onMounted, ref } from 'vue'
 import { myGrades } from '@/api/grade'
 import type { GradeVO } from '@/types'
@@ -86,6 +91,7 @@ const gpa = computed(() => {
 })
 const passedCount = computed(() => grades.value.filter(g => g.passed).length)
 
+// 成绩审核状态 → 中文文案（录入中 / 待审核 / 已审核 / 已发布），未识别状态兜底为"未发布"
 function statusText(status: string) {
   const map: Record<string, string> = {
     DRAFT: '录入中',
@@ -96,6 +102,7 @@ function statusText(status: string) {
   return map[status] || '未发布'
 }
 
+// 成绩审核状态 → el-tag 颜色类型（录入中=灰 info、待审核=橙 warning、已审核=灰 info、已发布=绿 success）
 function statusTagType(status: string) {
   const map: Record<string, 'info' | 'warning' | 'success'> = {
     DRAFT: 'info',
@@ -106,6 +113,7 @@ function statusTagType(status: string) {
   return map[status] || 'info'
 }
 
+// 成绩列展示文案：缓考 / 缺考 / 舞弊为特殊标记，其余返回实际分数
 function markText(row: GradeVO) {
   if (row.mark === 'DEFER') return '缓考'
   if (row.mark === 'ABSENT') return '缺考'
@@ -113,6 +121,7 @@ function markText(row: GradeVO) {
   return row.score
 }
 
+// 页面挂载后请求当前学生的成绩列表，期间展示全局 loading
 onMounted(async () => {
   loading.value = true
   try {

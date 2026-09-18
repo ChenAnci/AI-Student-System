@@ -1,3 +1,7 @@
+// ===== axios 统一封装（http） =====
+// 职责：创建全局 axios 实例，统一 baseURL 与超时；
+// 请求拦截器自动附加 JWT；响应拦截器解包业务数据、统一错误提示、
+// 401 清登录态并跳转登录页、支持 Blob 文件下载；另提供下载工具函数。
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '@/router'

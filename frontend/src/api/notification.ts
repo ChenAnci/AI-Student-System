@@ -1,9 +1,12 @@
+// ===== 站内通知相关接口（notification） =====
+// 职责：封装通知收件箱/未读数/已读/发件箱/发送等接口，以及发送对象类型定义。
 import http from './http'
 import type { NotificationItem, PageResult } from '@/types'
 
 // 通知接收对象类型：按学生 ID / 班级 / 专业 / 院系 / 课程 / 全体学生；老师角色只允许 COURSE（按课程）
 export type TargetKind = 'STUDENT_IDS' | 'CLASS' | 'MAJOR' | 'DEPARTMENT' | 'COURSE' | 'ALL'
 
+/** 通知接收目标：kind 指定维度，其余字段按 kind 对应的维度填写 */
 export interface NotificationTarget {
   kind: TargetKind
   studentIds?: number[]
@@ -13,6 +16,7 @@ export interface NotificationTarget {
   courseId?: number
 }
 
+/** 发送通知请求体：标题 + 内容 + 接收目标 */
 export interface SendNotificationBody {
   title: string
   content: string

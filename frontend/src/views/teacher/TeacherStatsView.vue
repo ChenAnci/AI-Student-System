@@ -77,6 +77,12 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * 教师成绩统计
+ * 职责：展示当前教师的授课统计（所授课程数、已评分学生人次、平均通过率、总平均分）；
+ *       用 ECharts 展示各课程平均分与成绩分数段分布，下方表格列出各课程明细；
+ *       支持手动刷新数据。
+ */
 import { computed, onMounted, ref } from 'vue'
 import type { EChartsOption } from 'echarts'
 import { getTeacherStats } from '@/api/stats'
@@ -87,18 +93,21 @@ import { escapeHtml } from '@/utils/escape'
 const loading = ref(false)
 const data = ref<TeacherStats>({} as TeacherStats)
 
+// 平均通过率 = 各课程通过率的算术平均（无已评分课程时为 0）
 const avgPassRate = computed(() => {
   const rows = data.value.courseScores || []
   if (!rows.length) return 0
   return rows.reduce((s, r) => s + (r.passRate || 0), 0) / rows.length
 })
 
+// 总平均分 = 各课程平均分的算术平均（无已评分课程时为 0）
 const avgScore = computed(() => {
   const rows = data.value.courseScores || []
   if (!rows.length) return 0
   return rows.reduce((s, r) => s + (r.avgScore || 0), 0) / rows.length
 })
 
+// 各课程平均分柱状图配置：以课程名为横轴，柱顶用 markLine 标出整体平均值
 const scoreOption = computed<EChartsOption>(() => {
   const rows = data.value.courseScores || []
   return {
@@ -124,6 +133,7 @@ const scoreOption = computed<EChartsOption>(() => {
   }
 })
 
+// 成绩分数段分布柱状图配置：数据直接取自后端的 scoreBands 统计结果
 const bandOption = computed<EChartsOption>(() => {
   const items = data.value.scoreBands || []
   return {
@@ -146,6 +156,7 @@ const bandOption = computed<EChartsOption>(() => {
   }
 })
 
+// 加载教师统计：请求后端聚合数据，刷新全部卡片与图表
 async function load() {
   loading.value = true
   try {
@@ -155,6 +166,7 @@ async function load() {
   }
 }
 
+// 页面挂载后加载一次统计数据
 onMounted(load)
 </script>
 

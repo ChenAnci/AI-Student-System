@@ -1,3 +1,5 @@
+// ===== 统计报表相关接口（stats） =====
+// 职责：封装教秘端全校数据统计与教师端所授课程成绩统计接口。
 import http from './http'
 import type { AdminStats, TeacherStats } from '@/types'
 

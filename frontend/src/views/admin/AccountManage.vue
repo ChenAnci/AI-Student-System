@@ -157,6 +157,12 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * 账号管理（教学秘书）
+ * 职责：分"教职工 / 学生"两个页签管理账号——查询、添加 / 编辑（学号工号与角色不可改）、
+ *       重置密码、冻结 / 启用 / 复学状态切换；
+ *       支持 Excel 批量导入（导入成功弹窗展示每人随机初始密码）、导出列表、下载导入模板。
+ */
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
@@ -206,11 +212,13 @@ const rules: FormRules = {
   roleType: [{ required: true, message: '请选择角色', trigger: 'change' }]
 }
 
+// 学生账号状态 → 中文文案（正常 / 冻结 / 休学）
 function statusText(status: string) {
   const map: Record<string, string> = { ENABLED: '正常', FROZEN: '冻结', SUSPENDED: '休学' }
   return map[status] || status
 }
 
+// 学生账号状态 → el-tag 颜色类型（与 statusText 对应）
 function statusTagType(status: string) {
   const map: Record<string, 'success' | 'danger' | 'warning'> = {
     ENABLED: 'success',

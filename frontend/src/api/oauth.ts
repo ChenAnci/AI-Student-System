@@ -1,3 +1,5 @@
+// ===== GitHub OAuth 登录/绑定相关接口（oauth） =====
+// 职责：封装 GitHub 授权地址获取、账号绑定与授权码换取登录态接口。
 import http from './http'
 import type { LoginResponse } from '@/types'
 

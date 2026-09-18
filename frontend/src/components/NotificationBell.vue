@@ -1,6 +1,11 @@
+<!-- ===== 通知铃铛组件（NotificationBell） =====
+  职责：顶栏的铃铛入口，展示未读角标（与 WS 实时推送同步），
+  下拉预览最新通知，点击进入通知中心并支持已读回写。 -->
 <template>
+  <!-- 点击铃铛展开下拉，展开时懒加载最新通知预览 -->
   <el-popover placement="bottom-end" :width="340" trigger="click" @show="load">
     <template #reference>
+      <!-- 未读角标：读取全局 store，unread 为 0 时隐藏 -->
       <el-badge :value="store.unread" :hidden="store.unread === 0" :max="99" class="bell">
         <el-button link circle>
           <el-icon :size="18"><Bell /></el-icon>
@@ -51,6 +56,7 @@ async function load() {
   }
 }
 
+// 跳转到通知中心页面查看全部通知
 function goAll() {
   router.push('/notifications')
 }
@@ -69,6 +75,7 @@ async function open(n: NotificationItem) {
   router.push('/notifications')
 }
 
+// 组件挂载后先加载一次最新通知预览
 onMounted(() => {
   load()
 })

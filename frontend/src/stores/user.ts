@@ -1,8 +1,12 @@
+// ===== 用户登录态 store（user） =====
+// 职责：集中管理登录态（token + 用户信息），支持从 sessionStorage 恢复，
+// 提供登录写入 / 登出清理 / 角色与姓名便捷判断，供路由守卫、菜单与组件使用。
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { LoginResponse, RoleType } from '@/types'
 import { clearToken, getToken, setToken } from '@/api/http'
 
+// sessionStorage 中用户信息的存储键名
 const USER_KEY = 'sms_user'
 
 export const useUserStore = defineStore('user', () => {

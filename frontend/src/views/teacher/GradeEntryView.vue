@@ -64,6 +64,12 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * 成绩管理（教师）
+ * 职责：选择课程后加载其审核流程状态与选课学生名单，逐人录入成绩或标记（正常/缓考/缺考/舞弊）；
+ *       支持批量导入 xlsx、导出名单、下载导入模板、保存成绩与提交审核；
+ *       成绩仅"录入中（DRAFT）"状态可编辑，提交后锁定，退回原因会在页头展示。
+ */
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -95,13 +101,16 @@ const gradeFileRef = ref<HTMLInputElement>()
 
 // 课程由页内选择器决定（支持从侧栏"成绩管理"直接进入并自行选课，不再强制从"我的课程"跳转）
 const courseId = computed(() => selectedCourseId.value)
+// 当前选中课程的名称（用于导出/模板文件名），未找到时兜底为"课程"
 const courseName = computed(() => {
   const c = myCourses.value.find((m) => m.id === selectedCourseId.value)
   return c ? c.courseName : '课程'
 })
 
+// 当前课程对应的审核流程记录（无记录时为空）
 const currentAudit = computed(() => audits.value.find((a) => a.courseId === courseId.value))
 
+// 成绩流程状态 → 中文文案（含可编辑/锁定提示）
 const auditText = computed(() => {
   const status = currentAudit.value?.status
   const map: Record<string, string> = {
@@ -113,6 +122,7 @@ const auditText = computed(() => {
   return status ? map[status] || status : '未发起'
 })
 
+// 成绩流程状态 → el-tag 颜色类型（与 auditText 对应）
 const auditTagType = computed(() => {
   const status = currentAudit.value?.status
   const map: Record<string, 'info' | 'warning' | 'success'> = {
@@ -126,6 +136,7 @@ const auditTagType = computed(() => {
 
 const rejectReason = computed(() => currentAudit.value?.rejectReason)
 
+// 特殊标记 → 中文文案（缓考 / 缺考 / 舞弊），用于成绩列占位展示
 function markLabel(mark: string) {
   const map: Record<string, string> = { DEFER: '缓考', ABSENT: '缺考', CHEAT: '舞弊' }
   return map[mark] || mark
@@ -176,6 +187,7 @@ function validate(): boolean {
   return true
 }
 
+// 保存成绩：通过校验后批量提交当前列表的成绩与标记，成功后重新加载最新数据
 async function handleSave() {
   if (!validate()) return
   saving.value = true

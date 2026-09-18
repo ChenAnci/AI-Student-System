@@ -74,6 +74,12 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * AI 学业助手（学生 / 管理员）
+ * 职责：提供与 DeepSeek-V3 的聊天式问答界面，支持快捷提问、回车发送；
+ *       学生咨询自己的学习情况；管理员可先选择目标学生，再针对该生提问；
+ *       发送时携带历史消息上下文，回答返回后自动滚动到最新消息。
+ */
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { aiChat, type AiChatMessage } from '@/api/ai'
@@ -91,10 +97,12 @@ const listRef = ref<HTMLElement>()
 const students = ref<Student[]>([])
 const selectedStudentNo = ref('')
 
+// 快捷提问按钮文案：管理员针对学生提问，学生咨询自己的学习情况（与角色联动）
 const quickQuestions = isAdmin.value
   ? ['这个学生的成绩怎么样？', '他还差多少学分？', '给他推荐下学期的课', '分析一下数据库原理这门课']
   : ['我的成绩怎么样？', '我还差多少学分？', '推荐下学期的课', '分析一下数据库原理这门课']
 
+// 把消息列表滚动到底部：等 DOM 更新（nextTick）后定位到最底部，让新消息可见
 function scrollToBottom() {
   nextTick(() => {
     if (listRef.value) {
@@ -103,6 +111,7 @@ function scrollToBottom() {
   })
 }
 
+// 发送当前输入框内容：去除首尾空格，空文本或请求中直接忽略；清空输入框后执行真正的发送逻辑
 async function sendCurrent() {
   const text = input.value.trim()
   if (!text || loading.value) return
@@ -110,10 +119,13 @@ async function sendCurrent() {
   await send(text)
 }
 
+// 管理员切换查询学生时清空历史会话，避免把上一个学生的上下文带给下一个学生
 function handleStudentChange() {
   messages.value = []
 }
 
+// 发送消息：管理员未选学生时拦截；把用户消息加入列表后携带历史上下文（不含本条）调用 AI 接口，
+// 将返回的答案追加为 assistant 消息；出错时由 http.ts 拦截器统一提示，结束后恢复 loading 并滚动到底部
 async function send(text: string) {
   if (isAdmin.value && !selectedStudentNo.value) {
     ElMessage.warning('请先选择要查询的学生')
@@ -133,6 +145,7 @@ async function send(text: string) {
   }
 }
 
+// 页面挂载时：若为管理员则加载学生列表供下拉选择（用于按学生提问），失败由拦截器提示
 onMounted(async () => {
   if (isAdmin.value) {
     try {

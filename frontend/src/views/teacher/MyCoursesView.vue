@@ -82,6 +82,12 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * 我的课程（教师）
+ * 职责：表格展示当前教师开设的课程及课程/成绩审核状态；
+ *       支持新建 / 编辑课程（弹窗表单 + 排课选择器）、发布课程（发布后锁定并进入选课中心）、
+ *       删除未发布课程，以及跳转到对应课程的成绩录入页。
+ */
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { createCourse, deleteCourse, listMyCourses, publishCourse, updateCourse } from '@/api/course'
@@ -115,6 +121,7 @@ const rules: FormRules = {
   capacity: [{ required: true, message: '请输入容量', trigger: 'blur' }]
 }
 
+// 成绩审核状态 → 中文文案（未发起成绩录入时显示"未发起"）
 function auditText(status?: string) {
   const map: Record<string, string> = {
     DRAFT: '录入中',
@@ -125,6 +132,7 @@ function auditText(status?: string) {
   return status ? map[status] || status : '未发起'
 }
 
+// 成绩审核状态 → el-tag 颜色类型（与 auditText 对应，未发起默认灰 info）
 function auditTagType(status?: string) {
   const map: Record<string, 'info' | 'warning' | 'success'> = {
     DRAFT: 'info',
@@ -135,6 +143,7 @@ function auditTagType(status?: string) {
   return status ? map[status] || 'info' : 'info'
 }
 
+// 加载当前教师的课程列表（加载期间展示全局 loading）
 async function load() {
   loading.value = true
   try {
@@ -144,6 +153,7 @@ async function load() {
   }
 }
 
+// 打开新建/编辑弹窗：传入课程行则回填表单（编辑），否则重置为默认值（新建）
 function openForm(row?: MyCourseVO) {
   form.id = row?.id
   form.courseCode = row?.courseCode ?? ''
@@ -157,6 +167,7 @@ function openForm(row?: MyCourseVO) {
   dialogVisible.value = true
 }
 
+// 保存课程：先通过表单校验，再按是否有 id 决定走更新或创建接口，成功后关闭弹窗并刷新列表
 async function handleSave() {
   await formRef.value?.validate()
   saving.value = true
@@ -175,6 +186,7 @@ async function handleSave() {
   }
 }
 
+// 发布课程：二次确认（提示发布后信息锁定并出现在选课中心）后调用发布接口并刷新列表
 function handlePublish(row: MyCourseVO) {
   ElMessageBox.confirm(
     `发布后课程信息将永久锁定，且会出现在学生选课中心，确定发布「${row.courseName}」吗？`,
@@ -187,6 +199,7 @@ function handlePublish(row: MyCourseVO) {
   })
 }
 
+// 删除课程：二次确认（仅未发布课程可删除）后调用删除接口并刷新列表
 function handleDelete(row: MyCourseVO) {
   ElMessageBox.confirm(`确定删除课程「${row.courseName}」吗？`, '删除确认', { type: 'warning' }).then(
     async () => {
@@ -197,6 +210,7 @@ function handleDelete(row: MyCourseVO) {
   )
 }
 
+// 页面挂载后加载我的课程列表
 onMounted(load)
 </script>
 

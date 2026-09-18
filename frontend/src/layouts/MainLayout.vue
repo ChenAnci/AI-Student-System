@@ -1,5 +1,10 @@
+<!-- ===== 主布局组件（MainLayout） =====
+  职责：登录后所有页面共用的整体框架——左侧深色导航栏（按角色动态生成菜单）、
+  顶部标题栏（角色标签/用户名/通知铃铛/修改密码/退出）、内容区路由出口，
+  并内置"修改密码"对话框与通知 WS 连接的挂载/卸载管理。 -->
 <template>
   <el-container class="layout">
+    <!-- 左侧边栏：Logo + 按角色渲染的导航菜单（router 模式点击即跳转） -->
     <el-aside width="220px" class="aside">
       <div class="logo">
         <el-icon :size="24" color="#409eff"><School /></el-icon>
@@ -22,6 +27,7 @@
     </el-aside>
 
     <el-container>
+      <!-- 顶部栏：页面标题 + 用户操作区（通知铃铛仅学生可见） -->
       <el-header class="header">
         <div class="page-title">{{ $route.meta.title }}</div>
         <div class="user-area">
@@ -32,11 +38,13 @@
           <el-button type="danger" link @click="handleLogout">退出登录</el-button>
         </div>
       </el-header>
+      <!-- 内容区：渲染当前路由页面 -->
       <el-main class="main">
         <router-view />
       </el-main>
     </el-container>
 
+    <!-- 修改密码对话框：旧密码 + 新密码 + 确认新密码，提交成功后强制重新登录 -->
     <el-dialog v-model="passwordDialogVisible" title="修改密码" width="420px" :close-on-click-modal="false">
       <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-width="90px">
         <el-form-item label="旧密码" prop="oldPassword">
@@ -69,6 +77,7 @@ import { changePassword } from '@/api/account'
 const router = useRouter()
 const userStore = useUserStore()
 
+/** 侧栏菜单项：路由路径 + 标题 + 图标组件名（Element Plus 图标） */
 interface MenuItem {
   path: string
   title: string
@@ -150,9 +159,11 @@ function handleLogout() {
 
 // ==================== 修改密码 ====================
 
+// 弹窗显隐 / 提交中状态 / 表单实例引用
 const passwordDialogVisible = ref(false)
 const passwordSubmitting = ref(false)
 const passwordFormRef = ref<FormInstance>()
+// 修改密码表单：旧密码 + 新密码 + 确认新密码
 const passwordForm = reactive({
   oldPassword: '',
   newPassword: '',
@@ -196,6 +207,7 @@ const passwordRules: FormRules = {
   ]
 }
 
+// 打开修改密码对话框：先清空上次输入的密码，避免残留
 function openPasswordDialog() {
   passwordForm.oldPassword = ''
   passwordForm.newPassword = ''

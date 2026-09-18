@@ -25,6 +25,11 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * 我的课程（学生）
+ * 职责：以表格展示当前学生已选修的课程（编号、名称、学分、教师、时间地点、人数）；
+ *       提供退课操作（二次确认后调用退课接口并刷新列表），空列表时给出引导提示。
+ */
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { myCourses, drop } from '@/api/enroll'
@@ -33,6 +38,7 @@ import type { CourseCardVO } from '@/types'
 const loading = ref(false)
 const courses = ref<CourseCardVO[]>([])
 
+// 加载当前学生已选修的课程列表（加载期间展示全局 loading）
 async function load() {
   loading.value = true
   try {
@@ -42,6 +48,7 @@ async function load() {
   }
 }
 
+// 退课：二次确认（type: warning）后调用退课接口，成功提示并刷新课程列表
 function handleDrop(row: CourseCardVO) {
   ElMessageBox.confirm(`确定退选「${row.courseName}」吗？`, '退课确认', { type: 'warning' }).then(
     async () => {
@@ -52,5 +59,6 @@ function handleDrop(row: CourseCardVO) {
   )
 }
 
+// 页面挂载后加载我的课程列表
 onMounted(load)
 </script>

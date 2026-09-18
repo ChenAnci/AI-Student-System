@@ -1,26 +1,34 @@
+// ===== 前端路由（router） =====
+// 职责：集中定义全部路由（公开页 / 登录后主框架 / 404 兜底），
+// 并通过全局前置守卫实现"登录态 + 角色权限（meta.roles）"两道访问控制。
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import type { RoleType } from '@/types'
 
+// 路由表：meta.public 标记公开页（无需登录）；meta.roles 标记允许访问的角色白名单
 const routes: RouteRecordRaw[] = [
+  // 公开页：门户首页
   {
     path: '/',
     name: 'Portal',
     component: () => import('@/views/PortalView.vue'),
     meta: { public: true, title: '门户首页' }
   },
+  // 公开页：登录
   {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/LoginView.vue'),
     meta: { public: true }
   },
+  // 公开页：GitHub OAuth 回调（换取登录态）
   {
     path: '/oauth/callback',
     name: 'OAuthCallback',
     component: () => import('@/views/OAuthCallback.vue'),
     meta: { public: true, title: '登录中' }
   },
+  // 公开页：GitHub 账号绑定
   {
     path: '/oauth/bind',
     name: 'OAuthBind',

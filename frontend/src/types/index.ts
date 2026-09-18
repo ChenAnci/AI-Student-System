@@ -74,10 +74,12 @@ export interface Course {
   status: 'UNPUBLISHED' | 'PUBLISHED'
 }
 
+/** 我的课程视图对象：在课程基础信息上附加成绩审核状态（老师/学生端课程列表用） */
 export interface MyCourseVO extends Course {
   auditStatus?: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PUBLISHED'
 }
 
+/** 选课中心课程卡片：附教师姓名、是否已选（enrolled）、是否满员（full） */
 export interface CourseCardVO {
   id: number
   courseCode: string
@@ -133,6 +135,7 @@ export interface GradeVO {
   gradePoint?: number | null
 }
 
+/** 学生端学业仪表盘数据：已修学分/要求学分/进度百分比/GPA 及成绩列表 */
 export interface DashboardData {
   totalEarnedCredits: number
   requiredCredits: number

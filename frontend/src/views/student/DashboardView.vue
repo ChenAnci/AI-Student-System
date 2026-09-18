@@ -108,6 +108,12 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * 学业仪表盘（学生）
+ * 职责：顶部展示已修学分 / 毕业要求学分 / 平均绩点 / 已修课程数等统计卡片；
+ *       以 SVG 环形图展示学分完成进度，表格展示最近成绩；
+ *       用 ECharts 展示成绩分数段分布与各课程成绩对比，数据来自后端 dashboard 接口。
+ */
 import { computed, onMounted, ref } from 'vue'
 import type { EChartsOption } from 'echarts'
 import { dashboard as getDashboard } from '@/api/grade'
@@ -118,17 +124,22 @@ import { escapeHtml } from '@/utils/escape'
 const loading = ref(false)
 const data = ref<DashboardData>({} as DashboardData)
 
+// 环形图圆周长（r=68），用于通过 dashoffset 计算进度弧的长度
 const circumference = 2 * Math.PI * 68
 
+// 学分完成进度：取值限制在 0~100%，防止后端异常值导致环形图溢出或负弧
 const progress = computed(() => {
   const p = Number(data.value.progressPercent ?? 0)
   return Math.min(100, Math.max(0, p))
 })
 
+// 环形图弧线偏移量：进度越接近 100%，偏移越小（弧越满）
 const dashOffset = computed(() => circumference * (1 - progress.value / 100))
 
+// 环形图中心展示的百分比文案
 const progressText = computed(() => `${progress.value.toFixed(1)}%`)
 
+// 最近成绩：仅取成绩列表前 6 条用于表格展示
 const recentGrades = computed<GradeVO[]>(() => (data.value.gradeList ?? []).slice(0, 6))
 
 /** 已发布且已评分成绩 */
@@ -193,6 +204,7 @@ const courseOption = computed<EChartsOption>(() => {
   }
 })
 
+// 成绩审核状态 → 中文文案（录入中 / 待审核 / 已审核 / 已发布）
 function statusText(status: string) {
   const map: Record<string, string> = {
     DRAFT: '录入中',
@@ -203,6 +215,7 @@ function statusText(status: string) {
   return map[status] || status || '未发布'
 }
 
+// 成绩审核状态 → el-tag 颜色类型（与 statusText 一一对应）
 function statusTagType(status: string) {
   const map: Record<string, 'info' | 'warning' | 'success'> = {
     DRAFT: 'info',
@@ -213,6 +226,7 @@ function statusTagType(status: string) {
   return map[status] || 'info'
 }
 
+// 页面挂载后请求仪表盘统计数据（统计卡片、环形图与两个 ECharts 图均基于该数据渲染）
 onMounted(async () => {
   loading.value = true
   try {
