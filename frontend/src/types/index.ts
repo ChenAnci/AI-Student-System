@@ -216,3 +216,15 @@ export interface PageResult<T> {
   current: number
   pages: number
 }
+
+/** 实时天气信息（后端 /api/weather；data 为 null 表示天气服务不可用） */
+export interface WeatherInfo {
+  city: string
+  text: string
+  temp: number
+  feelsLike: number
+  windClass: string
+  windDir: string
+  humidity: number
+  updateTime: string
+}
