@@ -66,6 +66,13 @@ oauth:
 ai:
   base-url: ${AI_BASE_URL:http://localhost:8000}
 
+# 百度天气实时接口（AK 通过环境变量注入，未配置时天气卡片降级为空）
+baidu:
+  weather:
+    ak: ${BAIDU_WEATHER_AK:}
+    district-id: 310100
+    cache-ttl-seconds: 1800
+
 # 应用自定义配置
 app:
   rate-limit:
