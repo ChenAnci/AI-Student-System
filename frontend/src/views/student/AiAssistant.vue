@@ -22,7 +22,7 @@
                 :value="s.studentNo"
               />
             </el-select>
-            <el-tag size="small" type="info">DeepSeek-V3</el-tag>
+            <el-tag size="small" type="info">DeepSeek-V4</el-tag>
           </div>
         </div>
       </template>
@@ -76,7 +76,7 @@
 <script setup lang="ts">
 /**
  * AI 学业助手（学生 / 管理员）
- * 职责：提供与 DeepSeek-V3 的聊天式问答界面，支持快捷提问、回车发送；
+ * 职责：提供与 DeepSeek-V4 的聊天式问答界面，支持快捷提问、回车发送；
  *       学生咨询自己的学习情况；管理员可先选择目标学生，再针对该生提问；
  *       发送时携带历史消息上下文，回答返回后自动滚动到最新消息。
  */
