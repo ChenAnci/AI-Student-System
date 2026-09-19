@@ -28,6 +28,9 @@
 - **选课监控**：课程选课人数、余量监控、代学生选课
 - **站内通知**：按学生/班级/专业/课程/全部学生发送通知
 
+### 实时天气卡片
+- **仪表盘实时天气卡片（上海，百度天气）**：学生仪表盘 / 教师统计页 / 教秘统计页展示上海实时天气（后端代理 + 30 分钟缓存），**接口失败自动降级不影响页面**——未配置 AK 或接口异常时卡片显示"天气服务暂不可用"，其余数据正常加载
+
 ### 站内通知系统（WebSocket）
 - **实时推送**：学生在线时通过 WebSocket 即时收到通知；离线消息落库、上线自动补齐
 - **发送方式**：管理员/教师手动发送（精确选人 / 按班级 / 按专业 / 按课程 / 全部学生）+ 系统自动触发（选课成功、成绩发布、调课变更）
@@ -74,7 +77,7 @@
 | 层 | 技术 |
 |---|---|
 | 前端 | Vue 3 + TypeScript + Vite + Element Plus + ECharts + Pinia + WebSocket |
-| 后端 | Spring Boot 2.7 + Java 17 + MyBatis-Plus + MySQL 8.0 + Redis + WebSocket |
+| 后端 | Spring Boot 2.7 + Java 17 + MyBatis-Plus + MySQL 8.0 + Redis + WebSocket + 百度天气 API |
 | AI 服务 | Python + FastAPI + LangChain / LangGraph + ChromaDB + BM25（jieba）+ Tavily（联网搜索） |
 | AI 模型 | LLM：DeepSeek 官方 `deepseek-v4-flash`；向量/重排：SiliconFlow BGE-M3 / BGE-Reranker-v2-M3 |
 | 安全 | JWT（HS256）+ 令牌版本吊销 + BCrypt + 角色权限拦截器 + 多态反序列化白名单 + 低权数据库账号 |
@@ -257,6 +260,7 @@ npm run dev
 | `CORS_ALLOWED_ORIGINS` | 前端域名白名单 | 后端启动时注入 |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth App 凭据（可选，启用 GitHub 登录） | 后端启动时注入 |
 | `GITHUB_REDIRECT_URI` | GitHub 授权回调地址（默认 `http://localhost:8080/api/oauth/github/callback`） | 后端启动时注入 |
+| `BAIDU_WEATHER_AK` | 百度地图天气查询 AK（可选，未配置时天气卡片降级显示"天气服务暂不可用"） | 后端启动时注入 |
 | `MYSQL_HOST` / `MYSQL_PORT` / `MYSQL_USER` / `MYSQL_PASSWORD` | AI 服务数据库连接（只读，`sms_app`） | backend-ai/.env |
 | `DEEPSEEK_API_KEY` | AI 对话模型密钥（`deepseek-v4-flash`，必填） | backend-ai/.env |
 | `SILICONFLOW_API_KEY` | AI 向量检索密钥（选课建议使用） | backend-ai/.env |
