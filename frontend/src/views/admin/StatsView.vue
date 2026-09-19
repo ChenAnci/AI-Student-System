@@ -1,5 +1,10 @@
 <template>
   <div v-loading="loading">
+    <el-row :gutter="16" class="mt16">
+      <el-col :span="24">
+        <WeatherCard />
+      </el-col>
+    </el-row>
     <!-- 统计卡片 -->
     <el-row :gutter="16">
       <el-col v-for="card in cards" :key="card.label" :span="4">
@@ -50,6 +55,7 @@ import { computed, onMounted, ref } from 'vue'
 import type { EChartsOption } from 'echarts'
 import { getAdminStats } from '@/api/stats'
 import EChart from '@/components/EChart.vue'
+import WeatherCard from '@/components/WeatherCard.vue'
 import type { AdminStats, NameValue } from '@/types'
 import { escapeHtml } from '@/utils/escape'
 

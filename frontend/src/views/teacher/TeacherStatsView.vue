@@ -1,5 +1,10 @@
 <template>
   <div v-loading="loading">
+    <el-row :gutter="16" class="mt16">
+      <el-col :span="24">
+        <WeatherCard />
+      </el-col>
+    </el-row>
     <div class="stats-toolbar">
       <el-button :loading="loading" @click="load">刷新数据</el-button>
     </div>
