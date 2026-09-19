@@ -62,6 +62,7 @@ public class JwtInterceptor implements HandlerInterceptor {
             {"/api/enrollments/**", "STUDENT"},
             {"/api/stats/admin", "ADMIN"},
             {"/api/stats/teacher", "TEACHER"},
+            {"/api/weather", "STUDENT,TEACHER,ADMIN"},
             {"/api/ai/**", "STUDENT,ADMIN"},
             // 站内通知（精确规则在前，fail-closed）
             {"/api/notifications/unread-count", "STUDENT"},
