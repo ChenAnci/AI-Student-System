@@ -98,6 +98,13 @@
             <artifactId>commons-pool2</artifactId>
         </dependency>
 
+        <!-- spring-dotenv：启动时自动加载 backend/.env（本地敏感配置不入库） -->
+        <dependency>
+            <groupId>me.paulschwarz</groupId>
+            <artifactId>spring-dotenv</artifactId>
+            <version>3.0.0</version>
+        </dependency>
+
         <!-- EasyExcel 导入导出 -->
         <dependency>
             <groupId>com.alibaba</groupId>
