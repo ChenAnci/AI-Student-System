@@ -1,4 +1,7 @@
 """LangGraph 工作流状态定义。"""
+# 模块 docstring：本文件定义 LangGraph 工作流各节点共享的状态结构。
+
+# import 区域：Any（任意类型）与 TypedDict（声明键值对结构的字典类型）。
 from typing import Any, TypedDict
 
 
@@ -10,6 +13,7 @@ class AIState(TypedDict):
     _route_after_query 依据它决定是否走 retrieve；tool_results 存 fetch 阶段的 SQL 结果，
     retrieved 存检索+重排后的课程，answer 是最终回答，error 非空表示链路短路。
     """
+    # 用 TypedDict 声明状态字段：各节点只返回自己改动的字段，LangGraph 按字段做增量合并。
     user_no: str                      # 登录账号（学生学号 / 管理员工号）
     role: str                         # STUDENT | ADMIN
     target_no: str                    # 管理员指定查询的目标学号（学生端为空）
@@ -23,4 +27,3 @@ class AIState(TypedDict):
     web_results: list[dict]            # Tavily 联网搜索结果（仅 FREE_QA 填写，可为空）
     answer: str                       # 最终回答
     error: str | None                 # 错误信息
-

@@ -1,4 +1,4 @@
-package com.example.sms.common;
+package com.example.sms.common; // 声明该类所在包：common 包，存放通用的返回封装与异常处理类
 
 /**
  * 业务异常。
@@ -7,10 +7,10 @@ package com.example.sms.common;
  * 429=限流（同样走 HTTP 200 + body.code 或拦截器直接写 429，视触发位置而定）。
  * 默认构造按 400 处理，即"业务上不合法的请求"。
  */
-public class BusinessException extends RuntimeException {
+public class BusinessException extends RuntimeException { // 继承 RuntimeException：业务异常属于运行时异常，抛出时无需声明 throws，可沿调用链自然向上传播
 
     /** 业务错误码：400=参数/业务错误；403=权限拒绝；429=限流 */
-    private final Integer code;
+    private final Integer code; // 用 final 保存业务错误码：异常一旦创建码即固定，供全局处理器读取后决定 HTTP 状态与 body.code
 
     /**
      * 默认业务错误：code=400（参数/业务校验不通过）
@@ -22,8 +22,8 @@ public class BusinessException extends RuntimeException {
      *    前端据此决定提示文案还是跳登录页，运维也能区分"业务报错"与"系统故障"；
      * 2) 抛出点无需关心如何序列化，由全局处理器统一转 JSON，业务代码更干净。
      */
-    public BusinessException(String message) {
-        this(400, message);
+    public BusinessException(String message) { // 仅传提示信息的构造：未指定 code，默认按 400（参数/业务错误）处理
+        this(400, message); // 委托到带 code 的构造，code 固定为 400，表示"业务上不合法的请求"
     }
 
     /**
@@ -32,13 +32,13 @@ public class BusinessException extends RuntimeException {
      * 调用逻辑：需要表达非 400 语义时使用（如权限校验失败抛 new BusinessException(403, "无权限")），
      * 同样由 GlobalExceptionHandler 捕获；code=403 时处理器会映射为真实 HTTP 403。
      */
-    public BusinessException(Integer code, String message) {
-        super(message);
-        this.code = code;
+    public BusinessException(Integer code, String message) { // 完整构造：允许调用方指定业务错误码与提示信息
+        super(message); // 把提示信息交给父类 RuntimeException 保存，后续可通过 getMessage() 取回
+        this.code = code; // 保存业务错误码到本对象的 final 字段，供 getCode() 读取
     }
 
     /** 供全局异常处理器读取，决定返回 HTTP 200 还是 HTTP 403 */
-    public Integer getCode() {
-        return code;
+    public Integer getCode() { // 对外暴露业务错误码：全局异常处理器据此决定响应的 HTTP 状态
+        return code; // 返回构造时保存的错误码
     }
 }
